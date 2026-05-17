@@ -10,7 +10,7 @@ layer. Data source: Financial Modeling Prep.
 | Stage  | Description                              | Status |
 |--------|------------------------------------------|--------|
 | 1      | Rule-based ORB backtest (Zarattini base) | code complete, real-data run pending |
-| 2      | LLM catalyst classifier                  | not started |
+| 2      | LLM catalyst classifier                  | code complete, real-data run pending |
 | 3      | XGBoost scoring layer                    | not started |
 | 4      | Paper trading loop                       | not started |
 
@@ -35,6 +35,9 @@ uv run python scripts/run_stage1_backtest.py 2022-01-03 2023-12-29
 
 # 6. run the gate tests against the persisted artifacts
 uv run pytest tests/test_stage1_gate.py -q
+
+# 7. backfill catalyst classifications over the Stage 1 candidates
+uv run python scripts/backfill_catalysts.py
 ```
 
 ## Architecture
@@ -45,9 +48,30 @@ src/halal_gap/
   universe/    daily universe (point-in-time S&P 500 + halal + liquidity + ATR)
   scanner/     pre-market gap scanner (9:25 ET)
   strategy/    ORB entry / exit rules (Zarattini)
+  catalyst/    Stage 2: news fetch + OpenAI structured-output classifier
+               + disk cache + daily cost cap + feature row
   backtest/    event-driven backtester + metrics + HTML report
   utils/       time helpers, indicators, config, logging
 ```
+
+## Stage 2: catalyst classifier
+
+`catalyst.classify(symbol, as_of, gap_pct, items)` returns a strict-JSON
+classification (`direction`, `strength`, `confidence`, `catalyst_type`,
+`summary`) using OpenAI's `json_schema` response format. Results are
+parquet-cached per (symbol + prompt-version + item titles); a per-day USD
+cost meter blocks calls once the `llm.max_daily_spend_usd` cap is reached.
+
+Hard rules:
+- News is fetched via `news_fetcher.fetch_news_before(symbol, as_of_ts)` and
+  strictly filters out anything published at or after `as_of_ts`.
+- When `OPENAI_API_KEY` is not set, a deterministic keyword-based fallback
+  fires and the result is flagged `skipped_reason="no_api_key"`.
+- When the day's cap is hit, the classifier returns
+  `skipped_reason="cost_cap"` and `passes_catalyst_gate` defaults to True
+  (do not block trades just because the budget is gone).
+- `PROMPT_VERSION` is part of the cache key, so editing the system prompt
+  forces re-classification automatically.
 
 All parameters live in `config/settings.yaml`. Halal exclusions live in
 `config/halal_exclusions.yaml`. No magic numbers in code.
