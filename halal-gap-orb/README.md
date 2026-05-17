@@ -1,0 +1,105 @@
+# halal-gap-orb
+
+A production-grade halal Opening Range Breakout (ORB) gap-trading system for
+US equities, built around the Zarattini-Barbon-Aziz (2024) "Stocks in Play"
+research, augmented with an LLM catalyst classifier and an XGBoost scoring
+layer. Data source: Financial Modeling Prep.
+
+## Status
+
+| Stage  | Description                              | Status |
+|--------|------------------------------------------|--------|
+| 1      | Rule-based ORB backtest (Zarattini base) | code complete, real-data run pending |
+| 2      | LLM catalyst classifier                  | not started |
+| 3      | XGBoost scoring layer                    | not started |
+| 4      | Paper trading loop                       | not started |
+
+## Quickstart
+
+```bash
+# 1. install deps (uv)
+uv sync
+
+# 2. copy env template, fill keys
+cp .env.example .env
+# edit .env -> FMP_API_KEY=..., OPENAI_API_KEY=...
+
+# 3. run synthetic smoke test (no API key required)
+uv run python scripts/smoke_test.py
+
+# 4. run unit tests
+uv run pytest -q
+
+# 5. run the full Stage 1 backtest (requires FMP_API_KEY)
+uv run python scripts/run_stage1_backtest.py 2022-01-03 2023-12-29
+
+# 6. run the gate tests against the persisted artifacts
+uv run pytest tests/test_stage1_gate.py -q
+```
+
+## Architecture
+
+```
+src/halal_gap/
+  data/        FMP async client, parquet cache, halal filter
+  universe/    daily universe (point-in-time S&P 500 + halal + liquidity + ATR)
+  scanner/     pre-market gap scanner (9:25 ET)
+  strategy/    ORB entry / exit rules (Zarattini)
+  backtest/    event-driven backtester + metrics + HTML report
+  utils/       time helpers, indicators, config, logging
+```
+
+All parameters live in `config/settings.yaml`. Halal exclusions live in
+`config/halal_exclusions.yaml`. No magic numbers in code.
+
+## Hard rules
+
+1. **Long-only.** No shorts (halal + locate-free).
+2. **Min price $25, 20-day $20M dollar volume, ATR &ge; 1% of price.**
+3. **Point-in-time S&P 500 universe**, reconstructed from FMP's historical
+   constituent change log. Never the current list.
+4. **No look-ahead.** Every feature takes an `as_of_ts` cutoff; LLM news
+   is filtered to publications strictly before the decision time.
+5. **All times in America/New_York.** Naive datetimes are rejected.
+6. **Every FMP call is parquet-cached** under `data/cache/{endpoint}/`.
+
+## Stage 1 gate
+
+To advance to Stage 2, the rule-based backtest must clear:
+
+- Sharpe &ge; 0.8 (out-of-sample 6 months)
+- Hit rate &ge; 42%
+- Max drawdown &ge; -25%
+- Trades/day in [0.5, 5.0]
+- Universe at any historical date &ne; current S&P 500 list
+
+Tests live in `tests/test_stage1_gate.py`. The performance-related tests
+auto-skip until `reports/stage1_artifacts.parquet` exists; produce it with
+`scripts/run_stage1_backtest.py`.
+
+## Expected realistic outcome
+
+Based on Zarattini SFI Paper 24-98 with the $25+ halal long-only universe
+and realistic slippage:
+
+| Metric        | Expected range |
+|---------------|----------------|
+| Hit rate      | 45-52%         |
+| Avg trade R   | +0.05 to +0.15 |
+| Sharpe        | 1.0 to 2.0     |
+| Max drawdown  | 15-25%         |
+| Trades/day    | 1 to 5         |
+
+If your backtest yields materially better numbers (Sharpe > 2.5, hit rate
+> 60%), assume a look-ahead bug and audit before declaring success.
+
+## Caveats
+
+- The full 2-year intraday pull for ~300 names is **slow** (hours) and
+  consumes FMP rate-limit. Run overnight; everything is cached.
+- US market holidays are not honoured by the synthetic session generator;
+  the backtester relies on FMP returning no rows on closed days.
+- Slippage and commissions are configurable; the defaults are intentionally
+  conservative compared to the Zarattini paper (which ignored slippage).
+- Short-borrow availability, LULD halts, and after-hours news are not
+  modelled in Stage 1.

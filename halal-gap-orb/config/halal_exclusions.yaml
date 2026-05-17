@@ -1,0 +1,68 @@
+# Sectors and industries excluded from the universe on Shariah grounds.
+# Matched against FMP company-profile fields (case-insensitive substring).
+
+excluded_sectors:
+  - "Financial Services"
+  - "Financial"
+  - "Banks"
+
+excluded_industries:
+  - "Banks"
+  - "Banks - Diversified"
+  - "Banks - Regional"
+  - "Insurance"
+  - "Insurance - Diversified"
+  - "Insurance - Life"
+  - "Insurance - Property & Casualty"
+  - "Insurance - Reinsurance"
+  - "Insurance - Specialty"
+  - "Capital Markets"
+  - "Credit Services"
+  - "Mortgage Finance"
+  - "Asset Management"
+  - "Financial Conglomerates"
+  - "Financial Data & Stock Exchanges"
+  - "Gambling"
+  - "Resorts & Casinos"
+  - "Alcoholic Beverages"
+  - "Beverages - Wineries & Distilleries"
+  - "Beverages - Brewers"
+  - "Tobacco"
+  - "Adult Entertainment"
+  - "Aerospace & Defense"
+
+# Tickers we never trade even if they pass other filters (e.g. SPACs, ADRs with
+# poor coverage, known halal-controversial names). Curate manually.
+excluded_tickers:
+  - "GS"      # Goldman Sachs (financial)
+  - "JPM"
+  - "BAC"
+  - "C"
+  - "WFC"
+  - "MS"
+  - "BLK"
+  - "AIG"
+  - "MET"
+  - "PRU"
+  - "TRV"
+  - "ALL"
+  - "BRK.A"
+  - "BRK.B"
+  - "MO"      # Altria (tobacco)
+  - "PM"      # Philip Morris
+  - "BTI"
+  - "STZ"     # Constellation Brands (alcohol)
+  - "TAP"
+  - "BUD"
+  - "DEO"
+  - "LMT"     # Lockheed (defense)
+  - "RTX"
+  - "NOC"
+  - "GD"
+  - "BA"      # Boeing (commercial+defense mix; conservative exclusion)
+  - "LVS"     # casinos
+  - "WYNN"
+  - "MGM"
+  - "CZR"
+  - "PENN"
+  - "DKNG"

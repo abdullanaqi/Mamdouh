@@ -1,0 +1,76 @@
+[project]
+name = "halal-gap-orb"
+version = "0.1.0"
+description = "Halal Opening Range Breakout system for US equities (Stocks-in-Play variant)."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Halal Gap ORB" }]
+dependencies = [
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "pyarrow>=15.0",
+    "aiohttp>=3.9",
+    "httpx>=0.27",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "xgboost>=2.0",
+    "scikit-learn>=1.4",
+    "shap>=0.45",
+    "openai>=1.30",
+    "python-dotenv>=1.0",
+    "loguru>=0.7",
+    "matplotlib>=3.8",
+    "tqdm>=4.66",
+    "tenacity>=8.2",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "mypy>=1.8",
+    "ruff>=0.4",
+    "black>=24.3",
+    "types-PyYAML",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/halal_gap"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "SIM", "PL"]
+ignore = ["PLR0913", "PLR2004"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+files = ["src/halal_gap"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra -q"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "mypy>=1.8",
+    "ruff>=0.4",
+    "black>=24.3",
+]
