@@ -11,7 +11,7 @@ layer. Data source: Financial Modeling Prep.
 |--------|------------------------------------------|--------|
 | 1      | Rule-based ORB backtest (Zarattini base) | code complete, real-data run pending |
 | 2      | LLM catalyst classifier                  | code complete, real-data run pending |
-| 3      | XGBoost scoring layer                    | not started |
+| 3      | XGBoost scoring layer                    | code complete, real-data run pending |
 | 4      | Paper trading loop                       | not started |
 
 ## Quickstart
@@ -38,7 +38,44 @@ uv run pytest tests/test_stage1_gate.py -q
 
 # 7. backfill catalyst classifications over the Stage 1 candidates
 uv run python scripts/backfill_catalysts.py
+
+# 8. train the Stage 3 XGBoost scoring model (walk-forward + final fit)
+uv run python scripts/train_stage3.py
 ```
+
+## Stage 3: XGBoost scoring layer
+
+`features.build_dataset(trades_df, catalysts_df)` projects the Stage 1
+trade log + Stage 2 catalyst log into a model-ready training set whose
+columns are exactly `features.feature_columns()` plus `symbol`, `as_of`,
+and `label` (1 if `pnl_r > 0`).
+
+`model.run_walk_forward(df)` runs CV with windows from
+`settings.ml.cv` (12-month train, 3-month test, 3-month step). Each fold
+returns AUC / PR-AUC / log-loss / Brier on its OOS slice. Folds smaller
+than 30 train rows or with homogeneous labels are skipped, not failed.
+
+`model.fit_final_model(df)` trains the production model on the full
+labelled dataset; the result is a `ScoringModel` that pickles itself with
+its canonical feature column list, so inference time cannot mis-order
+inputs. `ScoringModel.passes(X, threshold=None)` enforces the
+`ml.win_probability_threshold` gate (default 0.55).
+
+`model.explain(model, X)` runs SHAP TreeExplainer and returns an
+`ExplanationBundle` with `top_k(row_idx, k)` and `mean_abs_importance()`
+helpers for monitoring.
+
+Hard rules:
+- No leakage. `features/dataset.py` projects only the as-of-09:35
+  inputs (gap, RVOL, ATR, risk) and the as-of-09:25 catalyst features.
+  A regression test (`test_build_dataset_no_leakage_columns`) refuses to
+  let `entry_price`, `exit_price`, `pnl_dollars`, `exit_reason`, or
+  `high_water_r` leak into the feature matrix.
+- Train and test slices are strictly non-overlapping in time
+  (`train_end == test_start`). No purging is necessary because the labels
+  are realised intraday on the same date as the features.
+- Categorical `catalyst_type` is one-hot encoded against the fixed
+  `CATALYST_TYPES` tuple so the schema is stable across runs.
 
 ## Architecture
 
@@ -50,6 +87,8 @@ src/halal_gap/
   strategy/    ORB entry / exit rules (Zarattini)
   catalyst/    Stage 2: news fetch + OpenAI structured-output classifier
                + disk cache + daily cost cap + feature row
+  features/    Stage 3: feature builder + training dataset assembly
+  model/       Stage 3: XGBoost predictor, walk-forward trainer, SHAP
   backtest/    event-driven backtester + metrics + HTML report
   utils/       time helpers, indicators, config, logging
 ```
