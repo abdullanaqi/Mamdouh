@@ -12,7 +12,7 @@ layer. Data source: Financial Modeling Prep.
 | 1      | Rule-based ORB backtest (Zarattini base) | code complete, real-data run pending |
 | 2      | LLM catalyst classifier                  | code complete, real-data run pending |
 | 3      | XGBoost scoring layer                    | code complete, real-data run pending |
-| 4      | Paper trading loop                       | not started |
+| 4      | Paper trading loop                       | code complete, real-data run pending |
 
 ## Quickstart
 
@@ -41,7 +41,42 @@ uv run python scripts/backfill_catalysts.py
 
 # 8. train the Stage 3 XGBoost scoring model (walk-forward + final fit)
 uv run python scripts/train_stage3.py
+
+# 9. run one paper-trading day end-to-end (kill switch + scan + gates + ledger)
+uv run python scripts/run_paper_day.py --date 2024-01-22 \
+    --use-catalyst --scoring-model models/scoring_model.pkl
 ```
+
+## Stage 4: paper-trading loop
+
+`execution.DailyOrchestrator` is the live/paper driver. Given a date, a
+universe, and per-symbol bars it:
+
+1. Evaluates `KillSwitch` against the equity log (+ optional VIX series).
+   If tripped, new entries are blocked for the day; existing positions
+   still resolve through normal stop / EOD logic.
+2. Runs the Stage 1 scanner and builds OR setups.
+3. Optionally applies the Stage 2 catalyst gate
+   (`passes_catalyst_gate`) and the Stage 3 ML gate
+   (`ScoringModel.passes`).
+4. Hands surviving setups to `PaperBroker.run_day`, which routes them
+   through `simulate_trade` and aggregates NAV.
+5. Appends realised positions to `data/paper_trades.parquet` and the
+   daily NAV to `data/paper_trades_equity.parquet`.
+
+`KillSwitch` is stateless: every rule comes from `config/settings.yaml
+-> kill_switch`. Rules covered:
+- consecutive losing days >= `consec_losing_days`
+- rolling drawdown over `rolling_dd_window_days` <= -`rolling_dd_pct`
+- paper-vs-live Sharpe divergence > `paper_live_sharpe_divergence`
+  (skipped when no live history is supplied)
+- VIX >= `vix_threshold` for `vix_consec_closes` consecutive closes
+- max pairwise position correlation >= `position_correlation_max`
+
+`PaperBroker` is intentionally a thin wrapper that uses the existing
+`strategy.orb.simulate_trade` (so the paper loop and the backtester
+share one fill model). A `Broker` Protocol is exposed so a live broker
+(Alpaca / IBKR) can drop in without orchestrator changes.
 
 ## Stage 3: XGBoost scoring layer
 
@@ -89,6 +124,7 @@ src/halal_gap/
                + disk cache + daily cost cap + feature row
   features/    Stage 3: feature builder + training dataset assembly
   model/       Stage 3: XGBoost predictor, walk-forward trainer, SHAP
+  execution/   Stage 4: paper broker + kill switch + ledger + orchestrator
   backtest/    event-driven backtester + metrics + HTML report
   utils/       time helpers, indicators, config, logging
 ```
