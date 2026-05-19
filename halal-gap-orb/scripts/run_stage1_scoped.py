@@ -161,7 +161,10 @@ HALAL_LARGE_CAPS: dict[str, tuple[str, str]] = {
 
 
 def _universe_row(
-    symbol: str, as_of: date, daily: pd.DataFrame
+    symbol: str,
+    as_of: date,
+    daily: pd.DataFrame,
+    universe: dict[str, tuple[str, str]],
 ) -> UniverseRow | None:
     """Apply min_price / dollar volume / ATR filter from in-memory daily bars."""
     cfg = settings()["universe"]
@@ -187,7 +190,7 @@ def _universe_row(
     if atr_pct < cfg["min_atr_pct"]:
         return None
 
-    sector, industry = HALAL_LARGE_CAPS[symbol]
+    sector, industry = universe[symbol]
     return UniverseRow(
         symbol=symbol,
         as_of=as_of,
@@ -248,7 +251,7 @@ async def main_async(
         for sym, bundle in bars.items():
             if bundle.daily.empty:
                 continue
-            row = _universe_row(sym, d, bundle.daily)
+            row = _universe_row(sym, d, bundle.daily, universe)
             if row is not None:
                 rows.append(row)
         universe_by_day[d] = rows
