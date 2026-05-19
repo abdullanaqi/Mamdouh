@@ -64,7 +64,7 @@ def synthetic_intraday() -> pd.DataFrame:
     days = [date(2024, 1, 22), date(2024, 1, 23), date(2024, 1, 24)]
     frames = []
     for i, d in enumerate(days):
-        frames.append(_session_bars(d, pre_vol=80_000, body_dir=1 if i == 2 else 0, gap=0.03 if i == 2 else 0.0))
+        frames.append(_session_bars(d, pre_vol=80_000, body_dir=1 if i == 2 else 0, gap=0.05 if i == 2 else 0.0))
     return pd.concat(frames, ignore_index=True)
 
 

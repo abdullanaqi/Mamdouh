@@ -109,7 +109,9 @@ def scan_one(
         if row.dollar_volume_20d >= cfg["large_cap_dollar_volume_threshold"]
         else cfg["min_gap_pct_default"]
     )
-    if gap_pct < threshold:
+    # Accept both gap-ups and gap-downs (long-only takes gap-downs that
+    # recover via a bullish 5-min OR — the standard mean-revert play).
+    if abs(gap_pct) < threshold:
         return None
     if dv < cfg["min_premarket_dollar_volume"]:
         return None
