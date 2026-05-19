@@ -24,7 +24,7 @@ strategy:
   stop_atr_multiplier: 0.10
   stop_min_pct: 0.005
   long_only: true
-  exit_mode: "mode_a_eod"       # "mode_a_eod" | "mode_b_2r_trail"
+  exit_mode: "mode_b_2r_trail"  # "mode_a_eod" | "mode_b_2r_trail"
   eod_exit_time: "15:55"
   trail_ema_period: 9
   partial_take_r: 2.0
