@@ -9,7 +9,7 @@ universe:
 
 scanner:
   min_gap_pct_large_cap: 0.02
-  min_gap_pct_default: 0.04
+  min_gap_pct_default: 0.02
   large_cap_dollar_volume_threshold: 100_000_000
   min_premarket_dollar_volume: 5_000_000
   min_premarket_rvol: 2.0
@@ -27,8 +27,8 @@ strategy:
   exit_mode: "mode_b_2r_trail"  # "mode_a_eod" | "mode_b_2r_trail"
   eod_exit_time: "15:55"
   trail_ema_period: 9
-  partial_take_r: 2.0
-  partial_take_fraction: 0.5
+  partial_take_r: 4.0
+  partial_take_fraction: 0.33
 
 risk:
   nav: 100_000.0
