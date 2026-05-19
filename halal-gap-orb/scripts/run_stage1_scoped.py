@@ -29,6 +29,7 @@ from halal_gap.backtest.report import render_report
 from halal_gap.backtest.runner import _bars_for_symbol, trading_sessions
 from halal_gap.data.fmp_client import FMPClient
 from halal_gap.data.halal_filter import HalalFilter
+from halal_gap.scanner.gap_scanner import precompute_ts
 from halal_gap.universe.builder import UniverseRow
 from halal_gap.utils.config import reports_dir, settings
 from halal_gap.utils.indicators import atr
@@ -126,7 +127,11 @@ async def main_async(start: date, end: date, out_dir) -> None:
         bars: dict[str, DailyBars] = {}
         for sym in symbols:
             try:
-                bars[sym] = await _bars_for_symbol(fmp, sym, start, end)
+                bundle = await _bars_for_symbol(fmp, sym, start, end)
+                # Pre-compute the tz-aware sorted `ts` column once so every
+                # subsequent scanner call short-circuits the conversion.
+                bundle.intraday = precompute_ts(bundle.intraday)
+                bars[sym] = bundle
                 log.info(
                     f"  {sym}: intraday={len(bars[sym].intraday)} daily={len(bars[sym].daily)}"
                 )

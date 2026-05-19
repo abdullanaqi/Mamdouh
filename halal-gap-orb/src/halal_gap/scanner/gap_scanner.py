@@ -27,15 +27,33 @@ class GapCandidate:
 
 
 def _ensure_ny_index(bars: pd.DataFrame) -> pd.DataFrame:
-    """Return a copy with a tz-aware NY datetime column `ts`."""
-    df = bars.copy()
-    if "date" in df.columns:
-        df["ts"] = df["date"].map(to_ny)
-    elif "datetime" in df.columns:
-        df["ts"] = df["datetime"].map(to_ny)
-    elif "ts" not in df.columns:
+    """Return a copy with a tz-aware NY datetime column `ts`.
+
+    Short-circuits when `ts` is already present and sorted, which is the
+    fast path after `precompute_ts` runs once at fetch time. Falls back to
+    a vectorised `pd.to_datetime` conversion (faster than the prior
+    per-row `.map(to_ny)`) when only a string date/datetime column exists.
+    """
+    if "ts" in bars.columns:
+        if bars["ts"].is_monotonic_increasing:
+            return bars
+        return bars.sort_values("ts").reset_index(drop=True)
+    src = "date" if "date" in bars.columns else "datetime" if "datetime" in bars.columns else None
+    if src is None:
         raise ValueError("intraday bars need a 'date' or 'datetime' column")
+    df = bars.copy()
+    ts = pd.to_datetime(df[src], errors="coerce")
+    if ts.dt.tz is None:
+        ts = ts.dt.tz_localize("America/New_York")
+    else:
+        ts = ts.dt.tz_convert("America/New_York")
+    df["ts"] = ts
     return df.sort_values("ts").reset_index(drop=True)
+
+
+def precompute_ts(bars: pd.DataFrame) -> pd.DataFrame:
+    """Eagerly add the sorted `ts` column so subsequent scanner calls are O(1)."""
+    return _ensure_ny_index(bars)
 
 
 def premarket_slice(bars: pd.DataFrame, d: date) -> pd.DataFrame:
