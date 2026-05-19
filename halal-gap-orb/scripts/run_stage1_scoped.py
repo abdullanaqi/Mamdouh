@@ -220,18 +220,27 @@ async def main_async(
 
     async with FMPClient() as fmp:
         bars: dict[str, DailyBars] = {}
-        for sym in symbols:
+
+        async def _fetch_one(sym: str) -> tuple[str, DailyBars | None, str | None]:
             try:
                 bundle = await _bars_for_symbol(fmp, sym, start, end)
-                # Pre-compute the tz-aware sorted `ts` column once so every
-                # subsequent scanner call short-circuits the conversion.
                 bundle.intraday = precompute_ts(bundle.intraday)
-                bars[sym] = bundle
-                log.info(
-                    f"  {sym}: intraday={len(bars[sym].intraday)} daily={len(bars[sym].daily)}"
-                )
+                return sym, bundle, None
             except Exception as exc:  # noqa: BLE001
-                log.warning(f"bars failed for {sym}: {exc}")
+                return sym, None, str(exc)
+
+        # Run fetches concurrently. The FMP client's internal semaphore
+        # caps actual HTTP concurrency to `rate_limit_concurrency`, so this
+        # is safe — it just lets the asyncio scheduler keep that pool busy.
+        results = await asyncio.gather(*[_fetch_one(s) for s in symbols])
+        for sym, bundle, err in results:
+            if bundle is None:
+                log.warning(f"bars failed for {sym}: {err}")
+                continue
+            bars[sym] = bundle
+        log.info(
+            f"fetched bars for {len(bars)}/{len(symbols)} symbols"
+        )
 
     universe_by_day: dict[date, list[UniverseRow]] = {}
     for d in sessions:
