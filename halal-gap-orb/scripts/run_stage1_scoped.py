@@ -199,14 +199,21 @@ def _universe_row(
     )
 
 
-async def main_async(start: date, end: date, out_dir) -> None:
+async def main_async(
+    start: date,
+    end: date,
+    out_dir,
+    universe: dict[str, tuple[str, str]] | None = None,
+) -> None:
+    if universe is None:
+        universe = HALAL_LARGE_CAPS
     sessions = trading_sessions(start, end)
     log.info(f"scoped Stage 1: {len(sessions)} sessions {start}..{end}")
 
     halal = HalalFilter.from_config()
     symbols = [
         s
-        for s, (sec, ind) in HALAL_LARGE_CAPS.items()
+        for s, (sec, ind) in universe.items()
         if halal.is_halal(ticker=s, sector=sec, industry=ind)
     ]
     log.info(f"halal-safe universe: {len(symbols)} symbols")
@@ -255,12 +262,26 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("start", help="YYYY-MM-DD start date")
     p.add_argument("end", help="YYYY-MM-DD end date")
+    p.add_argument(
+        "--universe",
+        choices=["large", "midcap"],
+        default="large",
+        help="large = built-in HALAL_LARGE_CAPS; midcap = scripts/_midcap_universe.py",
+    )
     args = p.parse_args()
+    universe = HALAL_LARGE_CAPS
+    if args.universe == "midcap":
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).parent))
+        from _midcap_universe import MIDCAP_HALAL  # noqa: PLC0415
+        universe = MIDCAP_HALAL
     asyncio.run(
         main_async(
             date.fromisoformat(args.start),
             date.fromisoformat(args.end),
             reports_dir(),
+            universe=universe,
         )
     )
 
