@@ -37,11 +37,17 @@ from halal_gap.utils.logging import log
 
 
 # Curated halal-safe S&P 500 large caps. Hand-picked from common Shariah
-# screens to skip the FMP-profile loop for each backtest day.
+# screens to skip the FMP-profile loop for each backtest day. Excludes
+# financials, alcohol/tobacco, gambling, conventional insurance, and the
+# usual borderline names (DIS, MCD). Sector / industry strings are only
+# used by HalalFilter; if a name slipped past the curation, HalalFilter
+# still rejects it via its built-in exclusion list.
 HALAL_LARGE_CAPS: dict[str, tuple[str, str]] = {
+    # Technology (28)
     "AAPL":  ("Technology", "Consumer Electronics"),
     "MSFT":  ("Technology", "Software - Infrastructure"),
     "GOOGL": ("Communication Services", "Internet Content & Information"),
+    "GOOG":  ("Communication Services", "Internet Content & Information"),
     "NVDA":  ("Technology", "Semiconductors"),
     "AMD":   ("Technology", "Semiconductors"),
     "ORCL":  ("Technology", "Software - Infrastructure"),
@@ -53,22 +59,104 @@ HALAL_LARGE_CAPS: dict[str, tuple[str, str]] = {
     "QCOM":  ("Technology", "Semiconductors"),
     "TXN":   ("Technology", "Semiconductors"),
     "AVGO":  ("Technology", "Semiconductors"),
+    "MU":    ("Technology", "Semiconductors"),
+    "AMAT":  ("Technology", "Semiconductor Equipment & Materials"),
+    "LRCX":  ("Technology", "Semiconductor Equipment & Materials"),
+    "KLAC":  ("Technology", "Semiconductor Equipment & Materials"),
+    "ADI":   ("Technology", "Semiconductors"),
+    "MRVL":  ("Technology", "Semiconductors"),
+    "PANW":  ("Technology", "Software - Infrastructure"),
+    "CRWD":  ("Technology", "Software - Infrastructure"),
+    "NOW":   ("Technology", "Software - Application"),
+    "INTU":  ("Technology", "Software - Application"),
+    "ACN":   ("Technology", "Information Technology Services"),
+    "NXPI":  ("Technology", "Semiconductors"),
+    "ANET":  ("Technology", "Computer Hardware"),
+    # Communication Services (5)
     "META":  ("Communication Services", "Internet Content & Information"),
     "NFLX":  ("Communication Services", "Entertainment"),
+    "VZ":    ("Communication Services", "Telecom Services"),
+    "TMUS":  ("Communication Services", "Telecom Services"),
+    "EA":    ("Communication Services", "Electronic Gaming & Multimedia"),
+    # Consumer Cyclical (10)
     "AMZN":  ("Consumer Cyclical", "Internet Retail"),
     "NKE":   ("Consumer Cyclical", "Footwear & Accessories"),
     "HD":    ("Consumer Cyclical", "Home Improvement Retail"),
+    "LOW":   ("Consumer Cyclical", "Home Improvement Retail"),
+    "TJX":   ("Consumer Cyclical", "Apparel Retail"),
+    "ULTA":  ("Consumer Cyclical", "Specialty Retail"),
+    "ORLY":  ("Consumer Cyclical", "Specialty Retail"),
+    "AZO":   ("Consumer Cyclical", "Specialty Retail"),
+    "LULU":  ("Consumer Cyclical", "Apparel Retail"),
+    "EBAY":  ("Consumer Cyclical", "Internet Retail"),
+    # Consumer Defensive (12)
+    "WMT":   ("Consumer Defensive", "Discount Stores"),
+    "TGT":   ("Consumer Defensive", "Discount Stores"),
     "COST":  ("Consumer Defensive", "Discount Stores"),
+    "KMB":   ("Consumer Defensive", "Household & Personal Products"),
+    "CL":    ("Consumer Defensive", "Household & Personal Products"),
+    "PG":    ("Consumer Defensive", "Household & Personal Products"),
+    "KR":    ("Consumer Defensive", "Grocery Stores"),
+    "GIS":   ("Consumer Defensive", "Packaged Foods"),
+    "HSY":   ("Consumer Defensive", "Confectioners"),
+    "MDLZ":  ("Consumer Defensive", "Confectioners"),
+    "PEP":   ("Consumer Defensive", "Beverages - Non-Alcoholic"),
+    "MNST":  ("Consumer Defensive", "Beverages - Non-Alcoholic"),
+    # Healthcare (15)
     "JNJ":   ("Healthcare", "Drug Manufacturers - General"),
     "MRK":   ("Healthcare", "Drug Manufacturers - General"),
     "PFE":   ("Healthcare", "Drug Manufacturers - General"),
     "ABT":   ("Healthcare", "Medical Devices"),
     "LLY":   ("Healthcare", "Drug Manufacturers - General"),
+    "TMO":   ("Healthcare", "Diagnostics & Research"),
+    "DHR":   ("Healthcare", "Diagnostics & Research"),
+    "BSX":   ("Healthcare", "Medical Devices"),
+    "MDT":   ("Healthcare", "Medical Devices"),
+    "SYK":   ("Healthcare", "Medical Devices"),
+    "ISRG":  ("Healthcare", "Medical Devices"),
+    "AMGN":  ("Healthcare", "Drug Manufacturers - General"),
+    "GILD":  ("Healthcare", "Drug Manufacturers - General"),
+    "REGN":  ("Healthcare", "Biotechnology"),
+    "VRTX":  ("Healthcare", "Biotechnology"),
+    # Industrials (18)
     "CAT":   ("Industrials", "Farm & Heavy Construction Machinery"),
     "DE":    ("Industrials", "Farm & Heavy Construction Machinery"),
     "UPS":   ("Industrials", "Integrated Freight & Logistics"),
+    "BA":    ("Industrials", "Aerospace & Defense"),
+    "GE":    ("Industrials", "Aerospace & Defense"),
+    "MMM":   ("Industrials", "Conglomerates"),
+    "EMR":   ("Industrials", "Specialty Industrial Machinery"),
+    "ETN":   ("Industrials", "Specialty Industrial Machinery"),
+    "ITW":   ("Industrials", "Specialty Industrial Machinery"),
+    "RTX":   ("Industrials", "Aerospace & Defense"),
+    "LMT":   ("Industrials", "Aerospace & Defense"),
+    "FDX":   ("Industrials", "Integrated Freight & Logistics"),
+    "NSC":   ("Industrials", "Railroads"),
+    "UNP":   ("Industrials", "Railroads"),
+    "CSX":   ("Industrials", "Railroads"),
+    "HON":   ("Industrials", "Conglomerates"),
+    "GWW":   ("Industrials", "Industrial Distribution"),
+    "URI":   ("Industrials", "Rental & Leasing Services"),
+    # Energy (8)
     "XOM":   ("Energy", "Oil & Gas Integrated"),
     "CVX":   ("Energy", "Oil & Gas Integrated"),
+    "COP":   ("Energy", "Oil & Gas E&P"),
+    "EOG":   ("Energy", "Oil & Gas E&P"),
+    "OXY":   ("Energy", "Oil & Gas E&P"),
+    "MPC":   ("Energy", "Oil & Gas Refining & Marketing"),
+    "VLO":   ("Energy", "Oil & Gas Refining & Marketing"),
+    "SLB":   ("Energy", "Oil & Gas Equipment & Services"),
+    # Materials (5)
+    "LIN":   ("Basic Materials", "Specialty Chemicals"),
+    "APD":   ("Basic Materials", "Specialty Chemicals"),
+    "ECL":   ("Basic Materials", "Specialty Chemicals"),
+    "SHW":   ("Basic Materials", "Specialty Chemicals"),
+    "NUE":   ("Basic Materials", "Steel"),
+    # Utilities (4)
+    "NEE":   ("Utilities", "Utilities - Regulated Electric"),
+    "DUK":   ("Utilities", "Utilities - Regulated Electric"),
+    "SO":    ("Utilities", "Utilities - Regulated Electric"),
+    "AEP":   ("Utilities", "Utilities - Regulated Electric"),
 }
 
 
