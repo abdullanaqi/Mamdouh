@@ -8,8 +8,8 @@ universe:
   use_sp500_constituents: true
 
 scanner:
-  min_gap_pct_large_cap: 0.0175
-  min_gap_pct_default: 0.0175
+  min_gap_pct_large_cap: 0.02
+  min_gap_pct_default: 0.02
   large_cap_dollar_volume_threshold: 100_000_000
   min_premarket_dollar_volume: 5_000_000
   min_premarket_rvol: 2.0
