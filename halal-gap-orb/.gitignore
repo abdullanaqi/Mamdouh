@@ -18,6 +18,8 @@ data/paper_trades.parquet
 models/*.pkl
 !models/.gitkeep
 reports/*.html
+reports/*.parquet
+reports/*.json
 !reports/.gitkeep
 notebooks/.ipynb_checkpoints/
 *.ipynb

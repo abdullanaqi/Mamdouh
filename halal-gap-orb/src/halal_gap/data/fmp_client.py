@@ -107,57 +107,69 @@ class FMPClient:
 
     async def company_profile(self, symbol: str) -> pd.DataFrame:
         """Return one-row DataFrame with sector / industry / mktCap."""
-        return await self._fetch(f"profile/{symbol}", {})
+        return await self._fetch("profile", {"symbol": symbol}, stable=True)
 
     async def sp500_historical_constituents(self) -> pd.DataFrame:
         """All historical S&P 500 add/remove events. Use to build point-in-time list."""
-        return await self._fetch("historical/sp500_constituent", {})
+        return await self._fetch("historical-sp500-constituent", {}, stable=True)
 
     async def sp500_current_constituents(self) -> pd.DataFrame:
         """Current S&P 500 constituents (use only for live trading, not backtest)."""
-        return await self._fetch("sp500_constituent", {})
+        return await self._fetch("sp500-constituent", {}, stable=True)
 
     async def historical_price_eod(
         self, symbol: str, start: date | str, end: date | str
     ) -> pd.DataFrame:
         """Daily OHLCV (full) for `symbol` between `start` and `end`."""
-        data = await self._fetch(
-            f"historical-price-full/{symbol}",
-            {"from": str(start), "to": str(end)},
+        df = await self._fetch(
+            "historical-price-eod/full",
+            {"symbol": symbol, "from": str(start), "to": str(end)},
+            stable=True,
         )
-        if "historical" in data.columns and len(data) > 0:
-            rows = data["historical"].iloc[0]
-            if isinstance(rows, list):
-                df = pd.DataFrame(rows)
-                df["symbol"] = symbol
-                return df
-        return data
+        if not df.empty and "symbol" not in df.columns:
+            df = df.copy()
+            df["symbol"] = symbol
+        return df
 
     async def intraday_5min(
         self, symbol: str, start: date | str, end: date | str
     ) -> pd.DataFrame:
-        """5-minute OHLCV bars between `start` and `end` (NY-local, no tz)."""
+        """5-minute OHLCV bars between `start` and `end` (NY-local, no tz).
+
+        `extended=true` includes pre-market (04:00) and after-hours bars.
+        """
         return await self._fetch(
-            f"historical-chart/5min/{symbol}",
-            {"from": str(start), "to": str(end)},
+            "historical-chart/5min",
+            {
+                "symbol": symbol,
+                "from": str(start),
+                "to": str(end),
+                "extended": "true",
+            },
+            stable=True,
         )
 
     async def shares_float(self, symbol: str) -> pd.DataFrame:
         """Float shares for `symbol`."""
-        return await self._fetch("shares_float", {"symbol": symbol})
+        return await self._fetch("shares-float", {"symbol": symbol}, stable=True)
 
     async def stock_news(
         self, symbol: str, start: date | str, end: date | str, limit: int = 50
     ) -> pd.DataFrame:
         """Stock news for `symbol` within a date range."""
         return await self._fetch(
-            "stock_news",
-            {"tickers": symbol, "from": str(start), "to": str(end), "limit": limit},
+            "news/stock",
+            {"symbols": symbol, "from": str(start), "to": str(end), "limit": limit},
+            stable=True,
         )
 
     async def press_releases(self, symbol: str, limit: int = 25) -> pd.DataFrame:
         """Press releases for `symbol`, newest first."""
-        return await self._fetch(f"press-releases/{symbol}", {"limit": limit})
+        return await self._fetch(
+            "news/press-releases",
+            {"symbol": symbol, "limit": limit},
+            stable=True,
+        )
 
 
 def _to_df(data: Any) -> pd.DataFrame:
