@@ -1,23 +1,23 @@
 {
   "model": {
-    "trades": 1253,
-    "win_pct": 61.8,
-    "avg_trade_pct": 1.0,
-    "median_pct": 1.557,
-    "sum_pct": 1253.0
+    "trades": 1085,
+    "win_pct": 39.5,
+    "avg_trade_pct": 0.115,
+    "median_pct": -0.2,
+    "sum_pct": 124.3
   },
   "scanner": {
-    "trades": 966,
-    "win_pct": 67.5,
-    "avg_trade_pct": 1.437,
-    "median_pct": 1.903,
-    "sum_pct": 1388.5
+    "trades": 688,
+    "win_pct": 38.8,
+    "avg_trade_pct": -0.188,
+    "median_pct": -0.246,
+    "sum_pct": -129.6
   },
   "random": {
-    "trades": 957,
-    "win_pct": 64.2,
-    "avg_trade_pct": 1.129,
-    "median_pct": 1.486,
-    "sum_pct": 1080.5
+    "trades": 682,
+    "win_pct": 37.4,
+    "avg_trade_pct": -0.115,
+    "median_pct": -0.2,
+    "sum_pct": -78.8
   }
 }
