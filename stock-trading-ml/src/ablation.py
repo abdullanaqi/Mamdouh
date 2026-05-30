@@ -50,8 +50,24 @@ def paired_stats(diff: np.ndarray, rng) -> dict:
                 p=round(float(p), 4), ci=[round(float(lo), 4), round(float(hi), 4)])
 
 
-def run_window(feature_file: str, label: str) -> dict:
-    print(f"\n===== {label}  ({feature_file}) =====", flush=True)
+def csv_candidate_pool(day: pd.DataFrame) -> pd.DataFrame:
+    """Leak-free candidate pool from the feature CSV (no DB needed): keep names
+    priced >= MIN_PRICE with a known forward return, then take the top
+    TOP_N_WATCH*2 by the premarket scanner proxy = pm_pct * log1p(pm_volume).
+
+    Note: this uses pm_pct (premarket-session return) as the momentum signal, a
+    leak-free non-ML baseline available for every window. It is a proxy for the
+    live DB scanner (which ranks by prev-close gap x premarket volume); Test B
+    uses the exact DB scanner for execution fidelity."""
+    d = day[(day["open_price"] >= bt.MIN_PRICE)].dropna(subset=["target_gain"]).copy()
+    if d.empty:
+        return d
+    d["pm_scan"] = d["pm_pct"].fillna(0.0) * np.log1p(d["pm_volume"].clip(lower=0).fillna(0.0))
+    return d.sort_values("pm_scan", ascending=False).head(bt.TOP_N_WATCH * 2)
+
+
+def run_window(feature_file: str, label: str, bars_available: bool) -> dict:
+    print(f"\n===== {label}  ({feature_file})  bars={bars_available} =====", flush=True)
     con = duckdb.connect(str(DB), read_only=True)
     halal = {e["ticker"] for e in json.load(open(RESULTS / "halal_stocks.json"))}
     present = {r[0] for r in con.execute("SELECT DISTINCT ticker FROM minute_bars").fetchall()}
@@ -63,10 +79,10 @@ def run_window(feature_file: str, label: str) -> dict:
 
     rng = np.random.default_rng(42)
     methods = ("model", "scanner", "random")
-    # Test A: per-day mean target_gain of top-N, per method per N
+    # Test A (CSV, always): per-day mean target_gain of top-N, per method per N
     A = {m: {n: [] for n in N_GRID} for m in methods}
     pool_mean = []                                   # sanity: candidate-pool mean target_gain
-    # Test B: per-trade fills, and per-day total pnl (paired)
+    # Test B (DB fills, bars only): per-trade fills, and per-day total pnl (paired)
     B_trades = {m: [] for m in methods}
     B_daypnl = {m: {} for m in methods}
 
@@ -76,40 +92,42 @@ def run_window(feature_file: str, label: str) -> dict:
         if models is None or d[:7] != asof:
             models = bt.train_models(hist)
             asof = d[:7]
-        today = feats[feats["date"] == d]
-        cands = bt.candidates_for_date(con, halal_sql, today, d)
-        if cands.empty:
-            continue
-        scored = bt.score(cands, models, skew=False)     # real features (fixed mode)
-        if "target_gain" not in scored or scored["target_gain"].isna().all():
-            continue
-        pool_mean.append(float(scored["target_gain"].mean()))
 
-        # three rankings over the SAME candidate pool
-        order = bt.premarket_scan_scores(con, halal_sql, d)
-        sc = scored.copy()
-        sc["scan"] = sc["ticker"].map(order).fillna(-1e9)
-        ranked = {
-            "model":   scored.sort_values("score", ascending=False),
-            "scanner": sc.sort_values("scan", ascending=False),
-            "random":  scored.sample(frac=1.0, random_state=int(rng.integers(1e9))),
-        }
+        # ---- Test A: selection-only forward return (CSV pool, no DB) ----
+        pool = csv_candidate_pool(feats[feats["date"] == d])
+        if not pool.empty:
+            scored = bt.score(pool, models, skew=False)
+            pool_mean.append(float(scored["target_gain"].mean()))
+            rankedA = {
+                "model":   scored.sort_values("score", ascending=False),
+                "scanner": scored.sort_values("pm_scan", ascending=False),
+                "random":  scored.sample(frac=1.0, random_state=int(rng.integers(1e9))),
+            }
+            for m in methods:
+                tg = rankedA[m]["target_gain"].to_numpy()
+                for n in N_GRID:
+                    top = tg[:n][~np.isnan(tg[:n])]
+                    if len(top):
+                        A[m][n].append(float(top.mean()))
 
-        # ---- Test A: selection-only forward return ----
-        for m in methods:
-            tg = ranked[m]["target_gain"].to_numpy()
-            for n in N_GRID:
-                top = tg[:n]
-                top = top[~np.isnan(top)]
-                if len(top):
-                    A[m][n].append(float(top.mean()))
-
-        # ---- Test B: equalized no-refill fills (top TOP_N_WATCH queue, max 2 seated) ----
-        for m in methods:
-            rk = ranked[m].head(bt.TOP_N_WATCH)
-            res = bt.simulate_day(con, d, rk, "fixed", no_refill=True)
-            B_trades[m].extend(res)
-            B_daypnl[m][d] = sum(r["pnl_pct"] for r in res)
+        # ---- Test B: equalized no-refill real fills (DB; mirrors live selector) ----
+        if bars_available:
+            cands = bt.candidates_for_date(con, halal_sql, feats[feats["date"] == d], d)
+            if cands.empty:
+                continue
+            sc = bt.score(cands, models, skew=False)
+            order = bt.premarket_scan_scores(con, halal_sql, d)
+            sc["scan"] = sc["ticker"].map(order).fillna(-1e9)
+            rankedB = {
+                "model":   sc.sort_values("score", ascending=False).head(bt.TOP_N_WATCH),
+                "scanner": sc.sort_values("scan", ascending=False).head(bt.TOP_N_WATCH),
+                "random":  sc.sample(min(bt.TOP_N_WATCH, len(sc)),
+                                     random_state=int(rng.integers(1e9))),
+            }
+            for m in methods:
+                res = bt.simulate_day(con, d, rankedB[m], "fixed", no_refill=True)
+                B_trades[m].extend(res)
+                B_daypnl[m][d] = sum(r["pnl_pct"] for r in res)
 
     con.close()
 
@@ -127,6 +145,11 @@ def run_window(feature_file: str, label: str) -> dict:
             model_minus_scanner=paired_stats(ms, rng))
 
     # ---- assemble Test B summary ----
+    if not bars_available:
+        return {"label": label, "test_days": len(test_dates),
+                "testA_selection_only": testA,
+                "testB_norefill_fills": {
+                    "note": "no intraday bars for this window in the DB; fills test not run"}}
     testB = {}
     for m in methods:
         df = pd.DataFrame(B_trades[m])
@@ -147,10 +170,28 @@ def run_window(feature_file: str, label: str) -> dict:
             "testA_selection_only": testA, "testB_norefill_fills": testB}
 
 
+def _db_date_range() -> tuple[str, str]:
+    """Min/max calendar date present in minute_bars (window_start is UTC ns; for
+    intraday US-equity bars the UTC date equals the ET trading date)."""
+    con = duckdb.connect(str(DB), read_only=True)
+    lo, hi = con.execute(
+        "SELECT min(window_start), max(window_start) FROM minute_bars").fetchone()
+    con.close()
+    to_d = lambda ns: pd.Timestamp(int(ns), unit="ns", tz="UTC").strftime("%Y-%m-%d")
+    return to_d(lo), to_d(hi)
+
+
 def run():
+    db_lo, db_hi = _db_date_range()
+    print(f"minute_bars date coverage: {db_lo} .. {db_hi}", flush=True)
     windows = [("features_2026.csv", "2026"),
                ("features_bear_2025.csv", "bear2025")]
-    out = {label: run_window(f, label) for f, label in windows}
+    out = {}
+    for f, label in windows:
+        wdates = sorted(pd.read_csv(RESULTS / f, usecols=["date"], dtype={"date": str})
+                        ["date"].unique())
+        bars = any(db_lo <= d <= db_hi for d in wdates)   # do bars exist for this window?
+        out[label] = run_window(f, label, bars_available=bars)
     json.dump(out, open(RESULTS / "ablation_fair_summary.json", "w"), indent=2)
     print("\n" + "=" * 60)
     print(json.dumps(out, indent=2))
