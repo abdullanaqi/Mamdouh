@@ -1,5 +1,7 @@
 .env
 data/*.duckdb
+data/*.duckdb.wal
+data/*.duckdb.tmp/
 data/flatfiles/
 results/*.pkl
 results/*.csv
