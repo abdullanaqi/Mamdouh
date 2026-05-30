@@ -39,6 +39,9 @@ ET_OFFSET_H       = 4   # legacy fallback only; real conversions use ZoneInfo (s
 SLIPPAGE          = 0.001  # 10 bps per side, applied to fills in live/paper accounting
 TOP_N_WATCH       = 20
 MAX_POSITIONS     = 2
+REFILL            = False  # False: seat up to MAX_POSITIONS as candidates confirm, never
+                           #        top up a freed slot after an exit (<=2 entries/day).
+                           #        Matches backtest simulate_day(no_refill=True).
 CONFIRM_BARS      = 2
 MIN_PRICE         = 5.0
 MIN_TRAIN_DAYS    = 30
@@ -1281,7 +1284,7 @@ def run_all_day(client: MassiveClient, watchlist: list[dict],
             del open_pos[sym]
             save_state(open_pos, today_str)
 
-        if not reentry_active.is_set():
+        if REFILL and not reentry_active.is_set():
             reentry_active.set()
             threading.Thread(target=_do_reentry, daemon=True).start()
 

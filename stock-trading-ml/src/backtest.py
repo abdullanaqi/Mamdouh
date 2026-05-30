@@ -262,8 +262,13 @@ def day_bars(con, ticker, date_str):
         ORDER BY window_start""").fetchdf()
 
 
-def simulate_day(con, date_str, ranked: pd.DataFrame, mode: str) -> list[dict]:
-    """Replay one day; ranked is sorted best-first with model preds + pm_pct."""
+def simulate_day(con, date_str, ranked: pd.DataFrame, mode: str,
+                 no_refill: bool = False) -> list[dict]:
+    """Replay one day; ranked is sorted best-first with model preds + pm_pct.
+
+    no_refill=True: seat up to MAX_POSITIONS as candidates confirm at the open, but
+    never top up a freed slot after an exit (at most MAX_POSITIONS entries/day).
+    """
     open_ns = utc_ns(date_str, OPEN_H, OPEN_M)
     bar1_ns = open_ns + 60_000_000_000          # 09:31
     bar2_ns = open_ns + 120_000_000_000         # 09:32 (entry after 2-bar confirm)
@@ -388,7 +393,8 @@ def simulate_day(con, date_str, ranked: pd.DataFrame, mode: str) -> list[dict]:
         results.append(dict(date=date_str, ticker=t, entry=round(p["entry"], 4),
                             exit=round(price, 4), reason=reason, pnl_pct=round(pnl, 3),
                             ent_ns=p["ent_ns"], ex_ns=ex_ns))
-        try_fill(ex_ns)        # refill freed slot at exit time
+        if not no_refill:
+            try_fill(ex_ns)    # refill freed slot at exit time
     return results
 
 
@@ -444,7 +450,16 @@ def candidates_for_date(con, halal_sql, feats_today: pd.DataFrame, date_str: str
     return feats_today[feats_today["ticker"].isin(keep)].copy()
 
 
-def run(test_start: str | None = None):
+def run(test_start: str | None = None, feature_file: str = "features_2026.csv",
+        modes: tuple[str, ...] = ("asis", "fixed"), no_refill: bool = False,
+        out_suffix: str = ""):
+    """Walk-forward backtest.
+
+    feature_file : cached feature CSV in results/ to replay (e.g. features_bear_2025.csv).
+    modes        : fill models to simulate ("asis"/"fixed"/"pessimistic").
+    no_refill    : at most MAX_POSITIONS entries/day, no slot-refilling after exits.
+    out_suffix   : appended to output filenames (backtest_{mode}{out_suffix}.csv).
+    """
     con = duckdb.connect(str(DB), read_only=True)
     halal = {e["ticker"] for e in json.load(open(RESULTS / "halal_stocks.json"))}
     present = {r[0] for r in con.execute("SELECT DISTINCT ticker FROM minute_bars").fetchall()}
@@ -452,7 +467,7 @@ def run(test_start: str | None = None):
     halal_sql = ",".join(f"'{t}'" for t in halal)
     print(f"Universe with bars: {len(halal)}", flush=True)
 
-    cache = RESULTS / "features_2026.csv"
+    cache = RESULTS / feature_file
     if cache.exists():
         print(f"Loading cached features <- {cache.name}", flush=True)
         feats = pd.read_csv(cache, dtype={"date": str})
@@ -468,7 +483,7 @@ def run(test_start: str | None = None):
     if test_start:
         test_dates = [d for d in test_dates if d >= test_start]
 
-    all_res = {"asis": [], "fixed": []}
+    all_res = {m: [] for m in modes}
     models, model_asof = None, None
     for d in test_dates:
         hist = feats[feats["date"] < d]
@@ -481,19 +496,19 @@ def run(test_start: str | None = None):
         cands = candidates_for_date(con, halal_sql, today, d)
         if cands.empty:
             continue
-        for mode in ("asis", "fixed"):
+        for mode in modes:
             sc = score(cands, models, skew=(mode == "asis"))
             ranked = sc.sort_values("score", ascending=False).head(TOP_N_WATCH)
-            res = simulate_day(con, d, ranked, mode)
+            res = simulate_day(con, d, ranked, mode, no_refill=no_refill)
             all_res[mode].extend(res)
-        print(f"  {d}: asis {len([r for r in all_res['asis'] if r['date']==d])} trades | "
-              f"fixed {len([r for r in all_res['fixed'] if r['date']==d])} trades", flush=True)
+        print(f"  {d}: " + " | ".join(
+            f"{m} {len([r for r in all_res[m] if r['date']==d])} trades" for m in modes), flush=True)
 
     con.close()
     summary = {}
-    for mode in ("asis", "fixed"):
+    for mode in modes:
         rdf = pd.DataFrame(all_res[mode])
-        rdf.to_csv(RESULTS / f"backtest_{mode}.csv", index=False)
+        rdf.to_csv(RESULTS / f"backtest_{mode}{out_suffix}.csv", index=False)
         if rdf.empty:
             summary[mode] = {"trades": 0}
             continue
@@ -505,7 +520,7 @@ def run(test_start: str | None = None):
             tp=int((rdf["reason"] == "TP").sum()), sl=int((rdf["reason"] == "SL").sum()),
             eod=int((rdf["reason"] == "EOD").sum()),
             days=rdf["date"].nunique())
-    json.dump(summary, open(RESULTS / "backtest_summary.json", "w"), indent=2)
+    json.dump(summary, open(RESULTS / f"backtest_summary{out_suffix}.json", "w"), indent=2)
     print("\n==== SUMMARY ====")
     print(json.dumps(summary, indent=2))
     return summary
