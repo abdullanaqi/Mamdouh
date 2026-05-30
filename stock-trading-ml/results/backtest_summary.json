@@ -1,22 +1,22 @@
 {
   "asis": {
-    "trades": 1253,
-    "win_rate": 99.4,
-    "total_pnl_pct": 3124.83,
-    "avg_pnl_pct": 2.494,
-    "tp": 1245,
-    "sl": 8,
-    "eod": 0,
+    "trades": 1086,
+    "win_rate": 85.6,
+    "total_pnl_pct": 1902.79,
+    "avg_pnl_pct": 1.752,
+    "tp": 903,
+    "sl": 124,
+    "eod": 59,
     "days": 77
   },
   "fixed": {
-    "trades": 1253,
-    "win_rate": 61.8,
-    "total_pnl_pct": 1253.0,
-    "avg_pnl_pct": 1.0,
-    "tp": 651,
-    "sl": 276,
-    "eod": 326,
+    "trades": 1085,
+    "win_rate": 39.5,
+    "total_pnl_pct": 124.32,
+    "avg_pnl_pct": 0.115,
+    "tp": 325,
+    "sl": 300,
+    "eod": 460,
     "days": 77
   }
 }

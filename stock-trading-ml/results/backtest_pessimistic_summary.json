@@ -1,9 +1,9 @@
 {
-  "trades": 1252,
-  "win_pct": 57.8,
-  "avg_trade_pct": 0.517,
-  "median_pct": 1.211,
-  "sum_pct": 646.8,
-  "worst_day_pct": -15.32,
-  "pos_days_pct": 83.0
+  "trades": 1085,
+  "win_pct": 34.0,
+  "avg_trade_pct": -0.415,
+  "median_pct": -0.28,
+  "sum_pct": -450.4,
+  "worst_day_pct": -25.37,
+  "pos_days_pct": 23.0
 }
