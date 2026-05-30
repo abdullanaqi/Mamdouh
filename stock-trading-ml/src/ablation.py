@@ -45,11 +45,8 @@ def run():
 
         # three rankings over the SAME candidate pool
         model_rank = scored.sort_values("score", ascending=False).head(bt.TOP_N_WATCH)
-        # scanner: need the day pct*logvol per ticker
-        db = con.execute(f"""SELECT ticker, open, close, volume FROM day_bars
-            WHERE date='{d}' AND ticker IN ({halal_sql})""").fetchdf()
-        db["scan"] = (db["close"] - db["open"]) / db["open"].replace(0, np.nan) * 100 * np.log1p(db["volume"])
-        order = db.set_index("ticker")["scan"]
+        # scanner: leak-free premarket gap x premarket volume (same as the selector)
+        order = bt.premarket_scan_scores(con, halal_sql, d)
         sc = scored.copy()
         sc["scan"] = sc["ticker"].map(order).fillna(-1e9)
         scanner_rank = sc.sort_values("scan", ascending=False).head(bt.TOP_N_WATCH)

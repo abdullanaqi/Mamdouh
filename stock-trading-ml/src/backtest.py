@@ -394,16 +394,53 @@ def simulate_day(con, date_str, ranked: pd.DataFrame, mode: str) -> list[dict]:
 
 # ════════════════════════════════ DRIVER ════════════════════════════════
 
+def premarket_scan_scores(con, halal_sql, date_str: str) -> pd.Series:
+    """Leak-free per-ticker scanner score = premarket gap% x log1p(premarket vol).
+    Returns a Series indexed by ticker (used by both the selector and the ablation)."""
+    prev = con.execute(f"""
+        SELECT ticker, close AS prev_close FROM day_bars
+        WHERE ticker IN ({halal_sql})
+          AND date = (SELECT MAX(date) FROM day_bars WHERE date < '{date_str}')""").fetchdf()
+    if prev.empty:
+        return pd.Series(dtype=float)
+    o_s = utc_ns(date_str, OPEN_H, OPEN_M)
+    o_e = o_s + 60_000_000_000
+    pm_s = utc_ns(date_str, 4, 0)
+    today_open = con.execute(f"""
+        SELECT ticker, FIRST(open ORDER BY window_start) AS o930 FROM minute_bars
+        WHERE window_start >= {o_s} AND window_start < {o_e} AND ticker IN ({halal_sql})
+        GROUP BY ticker""").fetchdf()
+    pmvol = con.execute(f"""
+        SELECT ticker, SUM(volume) AS pm_volume FROM minute_bars
+        WHERE window_start >= {pm_s} AND window_start < {o_s} AND ticker IN ({halal_sql})
+        GROUP BY ticker""").fetchdf()
+    db = today_open.merge(prev, on="ticker", how="inner").merge(pmvol, on="ticker", how="left")
+    db["pm_volume"] = db["pm_volume"].fillna(0.0)
+    db = db[(db["o930"] >= MIN_PRICE) & (db["prev_close"] > 0)]
+    if db.empty:
+        return pd.Series(dtype=float)
+    gap = (db["o930"] - db["prev_close"]) / db["prev_close"] * 100
+    db["scan"] = gap * np.log1p(db["pm_volume"])
+    return db.set_index("ticker")["scan"]
+
+
 def candidates_for_date(con, halal_sql, feats_today: pd.DataFrame, date_str: str) -> pd.DataFrame:
-    """Scanner: rank halal day_bars by pct*log(volume), price>=MIN_PRICE, top 2*TOP_N."""
-    db = con.execute(f"""SELECT ticker, open, close, volume FROM day_bars
-        WHERE date='{date_str}' AND ticker IN ({halal_sql}) AND close>={MIN_PRICE} AND open>0
-        """).fetchdf()
-    if db.empty or feats_today.empty:
+    """Leak-free scanner: rank by PREMARKET gap x premarket volume, using only
+    information available at 09:30 ET.
+
+    NOTE: the previous version ranked by (day_bars.close - day_bars.open), i.e. the
+    FULL-DAY return -- end-of-day data not knowable at entry. That look-ahead made
+    the backtest pre-select the day's winners. Here we use:
+      gap%  = (today 09:30 open - prior-day close) / prior-day close
+      pmvol = premarket (04:00-09:30) volume
+    Both are observable before the first trade.
+    """
+    if feats_today.empty:
         return pd.DataFrame()
-    db["pct"] = (db["close"] - db["open"]) / db["open"] * 100
-    db["scan"] = db["pct"] * np.log1p(db["volume"])
-    keep = set(db.sort_values("scan", ascending=False).head(TOP_N_WATCH * 2)["ticker"])
+    scan = premarket_scan_scores(con, halal_sql, date_str)
+    if scan.empty:
+        return pd.DataFrame()
+    keep = set(scan.sort_values(ascending=False).head(TOP_N_WATCH * 2).index)
     return feats_today[feats_today["ticker"].isin(keep)].copy()
 
 
