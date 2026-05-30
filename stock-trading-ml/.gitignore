@@ -1,0 +1,12 @@
+.env
+data/*.duckdb
+data/flatfiles/
+results/*.pkl
+results/*.csv
+results/sessions/
+__pycache__/
+*.pyc
+
+# ...but DO commit the backtest deliverables
+!results/backtest_asis.csv
+!results/backtest_fixed.csv
