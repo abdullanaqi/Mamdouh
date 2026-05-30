@@ -1,0 +1,286 @@
+{
+  "2026": {
+    "label": "2026",
+    "test_days": 77,
+    "testA_selection_only": {
+      "pool_mean_target_gain": -0.0692,
+      "N=1": {
+        "mean_pick_gain": {
+          "model": 6.6406,
+          "scanner": -0.0456,
+          "random": -0.2548
+        },
+        "days": 77,
+        "model_minus_random": {
+          "n": 77,
+          "mean": 6.8954,
+          "t": 9.947,
+          "p": 0.0,
+          "ci": [
+            5.582,
+            8.2847
+          ]
+        },
+        "model_minus_scanner": {
+          "n": 77,
+          "mean": 6.6862,
+          "t": 6.826,
+          "p": 0.0,
+          "ci": [
+            4.8271,
+            8.6669
+          ]
+        }
+      },
+      "N=2": {
+        "mean_pick_gain": {
+          "model": 6.0775,
+          "scanner": 0.3782,
+          "random": -0.0065
+        },
+        "days": 77,
+        "model_minus_random": {
+          "n": 77,
+          "mean": 6.0841,
+          "t": 11.697,
+          "p": 0.0,
+          "ci": [
+            5.076,
+            7.0843
+          ]
+        },
+        "model_minus_scanner": {
+          "n": 77,
+          "mean": 5.6993,
+          "t": 8.743,
+          "p": 0.0,
+          "ci": [
+            4.4447,
+            6.9967
+          ]
+        }
+      },
+      "N=5": {
+        "mean_pick_gain": {
+          "model": 4.4692,
+          "scanner": 0.0309,
+          "random": -0.048
+        },
+        "days": 77,
+        "model_minus_random": {
+          "n": 77,
+          "mean": 4.5172,
+          "t": 12.923,
+          "p": 0.0,
+          "ci": [
+            3.864,
+            5.2066
+          ]
+        },
+        "model_minus_scanner": {
+          "n": 77,
+          "mean": 4.4383,
+          "t": 15.709,
+          "p": 0.0,
+          "ci": [
+            3.9009,
+            4.998
+          ]
+        }
+      },
+      "N=20": {
+        "mean_pick_gain": {
+          "model": 1.9492,
+          "scanner": -0.1515,
+          "random": 0.0265
+        },
+        "days": 77,
+        "model_minus_random": {
+          "n": 77,
+          "mean": 1.9227,
+          "t": 19.317,
+          "p": 0.0,
+          "ci": [
+            1.7325,
+            2.1235
+          ]
+        },
+        "model_minus_scanner": {
+          "n": 77,
+          "mean": 2.1007,
+          "t": 21.862,
+          "p": 0.0,
+          "ci": [
+            1.9146,
+            2.2866
+          ]
+        }
+      }
+    },
+    "testB_norefill_fills": {
+      "model": {
+        "trades": 154,
+        "trades_per_day": 2.0,
+        "win_pct": 65.6,
+        "avg_trade_pct": 1.427,
+        "sum_pct": 219.7
+      },
+      "scanner": {
+        "trades": 154,
+        "trades_per_day": 2.0,
+        "win_pct": 51.3,
+        "avg_trade_pct": -0.074,
+        "sum_pct": -11.5
+      },
+      "random": {
+        "trades": 154,
+        "trades_per_day": 2.0,
+        "win_pct": 53.2,
+        "avg_trade_pct": -0.311,
+        "sum_pct": -47.8
+      },
+      "model_minus_random_dayPnL": {
+        "n": 77,
+        "mean": 3.4741,
+        "t": 5.417,
+        "p": 0.0,
+        "ci": [
+          2.2584,
+          4.7394
+        ]
+      },
+      "model_minus_scanner_dayPnL": {
+        "n": 77,
+        "mean": 3.0019,
+        "t": 4.66,
+        "p": 0.0,
+        "ci": [
+          1.7636,
+          4.2453
+        ]
+      }
+    }
+  },
+  "bear2025": {
+    "label": "bear2025",
+    "test_days": 67,
+    "testA_selection_only": {
+      "pool_mean_target_gain": -0.2768,
+      "N=1": {
+        "mean_pick_gain": {
+          "model": 5.3639,
+          "scanner": -2.5371,
+          "random": 0.0761
+        },
+        "days": 67,
+        "model_minus_random": {
+          "n": 67,
+          "mean": 5.2878,
+          "t": 7.114,
+          "p": 0.0,
+          "ci": [
+            3.9075,
+            6.7732
+          ]
+        },
+        "model_minus_scanner": {
+          "n": 67,
+          "mean": 7.901,
+          "t": 6.904,
+          "p": 0.0,
+          "ci": [
+            5.7781,
+            10.2215
+          ]
+        }
+      },
+      "N=2": {
+        "mean_pick_gain": {
+          "model": 4.7709,
+          "scanner": -1.7122,
+          "random": -0.1268
+        },
+        "days": 67,
+        "model_minus_random": {
+          "n": 67,
+          "mean": 4.8977,
+          "t": 7.741,
+          "p": 0.0,
+          "ci": [
+            3.7008,
+            6.1522
+          ]
+        },
+        "model_minus_scanner": {
+          "n": 67,
+          "mean": 6.4831,
+          "t": 8.424,
+          "p": 0.0,
+          "ci": [
+            5.0439,
+            7.9847
+          ]
+        }
+      },
+      "N=5": {
+        "mean_pick_gain": {
+          "model": 3.0649,
+          "scanner": -0.8104,
+          "random": -0.1377
+        },
+        "days": 67,
+        "model_minus_random": {
+          "n": 67,
+          "mean": 3.2026,
+          "t": 9.704,
+          "p": 0.0,
+          "ci": [
+            2.5788,
+            3.8704
+          ]
+        },
+        "model_minus_scanner": {
+          "n": 67,
+          "mean": 3.8753,
+          "t": 10.135,
+          "p": 0.0,
+          "ci": [
+            3.1281,
+            4.6265
+          ]
+        }
+      },
+      "N=20": {
+        "mean_pick_gain": {
+          "model": 1.1776,
+          "scanner": -0.4576,
+          "random": -0.1519
+        },
+        "days": 67,
+        "model_minus_random": {
+          "n": 67,
+          "mean": 1.3296,
+          "t": 12.966,
+          "p": 0.0,
+          "ci": [
+            1.1329,
+            1.5349
+          ]
+        },
+        "model_minus_scanner": {
+          "n": 67,
+          "mean": 1.6353,
+          "t": 12.352,
+          "p": 0.0,
+          "ci": [
+            1.3906,
+            1.9025
+          ]
+        }
+      }
+    },
+    "testB_norefill_fills": {
+      "note": "no intraday bars for this window in the DB; fills test not run"
+    }
+  }
+}
