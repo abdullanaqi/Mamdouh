@@ -3,6 +3,7 @@ data/*.duckdb
 data/flatfiles/
 results/*.pkl
 results/*.csv
+results/*.log
 results/sessions/
 __pycache__/
 *.pyc
@@ -10,3 +11,5 @@ __pycache__/
 # ...but DO commit the backtest deliverables
 !results/backtest_asis.csv
 !results/backtest_fixed.csv
+!results/backtest_fixed_norefill.csv
+!results/backtest_pessimistic_norefill.csv
