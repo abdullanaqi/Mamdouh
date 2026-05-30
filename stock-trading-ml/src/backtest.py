@@ -268,6 +268,7 @@ def simulate_day(con, date_str, ranked: pd.DataFrame, mode: str) -> list[dict]:
     bar1_ns = open_ns + 60_000_000_000          # 09:31
     bar2_ns = open_ns + 120_000_000_000         # 09:32 (entry after 2-bar confirm)
     asis = (mode == "asis")
+    pessimistic = (mode == "pessimistic")       # worst-case: bar touching both TP&SL -> SL
     bars_cache = {}
 
     def bars(t):
@@ -288,6 +289,9 @@ def simulate_day(con, date_str, ranked: pd.DataFrame, mode: str) -> list[dict]:
             return None
         if asis:
             entry = float(o930["open"])          # BUG: stale opening tick
+        elif pessimistic:
+            # chase: enter at the 09:32 bar HIGH (worst intrabar buy) + slippage
+            entry = float(entry_bar["high"].iloc[0]) * (1 + SLIPPAGE)
         else:
             entry = float(entry_bar["open"].iloc[0]) * (1 + SLIPPAGE)
         return entry, bar2_ns
@@ -314,6 +318,13 @@ def simulate_day(con, date_str, ranked: pd.DataFrame, mode: str) -> list[dict]:
                     return tp, "TP", r["ts"]
                 if lo <= sl:
                     return sl, "SL", r["ts"]
+            elif pessimistic:
+                # worst case: any bar touching SL fills at the bar LOW (slip past stop);
+                # SL always checked first even if the same bar also tags TP.
+                if lo <= sl:
+                    return float(lo) * (1 - SLIPPAGE), "SL", r["ts"]
+                if hi >= tp:
+                    return tp * (1 - SLIPPAGE), "TP", r["ts"]
             else:
                 # conservative: SL-first within a bar, slippage against us
                 if lo <= sl:
