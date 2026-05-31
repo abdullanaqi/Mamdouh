@@ -19,8 +19,8 @@ import requests
 from dotenv import load_dotenv
 from massive import RESTClient, WebSocketClient
 from massive.rest.models import Agg, TickerSnapshot
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestClassifier
-from sklearn.metrics import classification_report, mean_absolute_error, r2_score
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.metrics import mean_absolute_error, r2_score
 
 warnings.filterwarnings("ignore")
 load_dotenv(Path(__file__).parent / ".env")
@@ -637,21 +637,6 @@ def _ensure_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _train_classifier(df: pd.DataFrame) -> RandomForestClassifier:
-    clf = RandomForestClassifier(
-        n_estimators=500, max_depth=7, min_samples_leaf=8,
-        max_features="sqrt", class_weight="balanced", random_state=42, n_jobs=-1,
-    )
-    train, test = _split(df)
-    if len(test) > 50:
-        clf.fit(train[FEATURES].fillna(0), train["label"])
-        preds = clf.predict(test[FEATURES].fillna(0))
-        print("\n  [Classifier] Validation:")
-        print(classification_report(test["label"], preds, target_names=["DOWN", "UP"], digits=3))
-    clf.fit(df[FEATURES].fillna(0), df["label"])
-    return clf
-
-
 def _train_regressor(df: pd.DataFrame, target_col: str, label: str) -> GradientBoostingRegressor | None:
     sub = df[df[target_col].notna()].copy()
     if len(sub) < 200:
@@ -688,9 +673,8 @@ def _load_or_train(train_df: pd.DataFrame, n_hist: int, retrain: bool) -> dict:
         raise RuntimeError("Not enough training data.")
 
     df = _ensure_features(_prepare_targets(train_df))
-    models = {
-        "clf":      _train_classifier(df),
-        "reg_gain": _train_regressor(df, "target_gain", "gain%"),
+    models = {                                   # single-model selection: rank by reg_gain;
+        "reg_gain": _train_regressor(df, "target_gain", "gain%"),    # reg_dd is stop-only
         "reg_dd":   _train_regressor(df, "target_dd",   "drawdown%"),
     }
     MODEL_PATH.parent.mkdir(exist_ok=True)
@@ -717,12 +701,12 @@ def run_training(retrain: bool = False, date_arg: str | None = None) -> tuple[di
     ranked = today_df.sort_values("pred_gain_pct", ascending=False)
 
     print(f"\n  TOP {TOP_N_WATCH} predictions for {target_date}:")
-    print(f"  {'#':<3} {'Ticker':<8} {'UpProb':>7} {'PredGain%':>10} {'PredDD%':>9}")
-    print(f"  {'-'*44}")
+    print(f"  {'#':<3} {'Ticker':<8} {'PredGain%':>10} {'PredDD%':>9}")
+    print(f"  {'-'*34}")
     for i, (_, r) in enumerate(ranked.head(TOP_N_WATCH).iterrows(), 1):
         pg  = f"{r['pred_gain_pct']:>+9.2f}%" if pd.notna(r.get("pred_gain_pct")) else "       n/a"
         dd  = f"{r['pred_dd_pct']:>+8.2f}%"   if pd.notna(r.get("pred_dd_pct"))   else "      n/a"
-        print(f"  {i:<3} {r['ticker']:<8} {r['up_prob']*100:>6.1f}%  {pg}  {dd}")
+        print(f"  {i:<3} {r['ticker']:<8} {pg}  {dd}")
 
     return models, ranked, target_date
 
@@ -902,12 +886,13 @@ def build_features(client: MassiveClient, tickers: list[str], today: datetime) -
 
 def calc_tp_sl(
     entry_price: float, pred_gain: float, pred_dd: float,
-    pm_pct: float, up_prob: float,
+    pm_pct: float,
     id_range_pct: float = 0.0, id_momentum: float = 0.0,
     id_vwap_diff: float = 0.0, id_high_dist: float = 0.0,
 ) -> tuple[float, float]:
+    # TP from the single gain model (reg_gain); SL from reg_dd (stop only).
     raw_tp = pred_gain if not np.isnan(pred_gain) else pm_pct * 1.5
-    raw_tp = raw_tp * (0.7 + 0.3 * up_prob)
+    raw_tp = raw_tp * 0.85
     if id_momentum > 0.5 and id_vwap_diff > 0:
         raw_tp *= min(1.25, 1.0 + id_momentum * 0.02)
     if id_high_dist > 2.0:
@@ -922,7 +907,7 @@ def calc_tp_sl(
         raw_sl = max(raw_sl, -1.0)
     sl_pct = float(raw_sl)
 
-    min_rr = 1.5 if up_prob < 0.6 else 1.0
+    min_rr = 1.3                                # fixed reward:risk floor (was up_prob-gated)
     tp_pct = float(max(tp_pct, abs(sl_pct) * min_rr))
 
     return round(entry_price * (1 + tp_pct / 100), 4), round(entry_price * (1 + sl_pct / 100), 4)
@@ -965,9 +950,8 @@ def confirm_entry(client: MassiveClient, ticker: str, today: datetime,
 def _make_position(row: dict, entry_price: float, entry_time: str, today: datetime) -> dict:
     pred_gain = float(row["pred_gain_pct"]) if pd.notna(row.get("pred_gain_pct")) else np.nan
     pred_dd   = float(row["pred_dd_pct"])   if pd.notna(row.get("pred_dd_pct"))   else np.nan
-    up_prob   = float(row["up_prob"])
     tp_price, sl_price = calc_tp_sl(
-        entry_price, pred_gain, pred_dd, row.get("pm_pct", 0.0), up_prob,
+        entry_price, pred_gain, pred_dd, row.get("pm_pct", 0.0),
         id_range_pct=float(row.get("id_range_pct", 0.0) or 0.0),
         id_momentum =float(row.get("id_momentum",  0.0) or 0.0),
         id_vwap_diff=float(row.get("id_vwap_diff", 0.0) or 0.0),
@@ -984,7 +968,6 @@ def _make_position(row: dict, entry_price: float, entry_time: str, today: dateti
         "sl_pct":     (sl_price - entry_price) / entry_price * 100,
         "pred_gain":  pred_gain,
         "pred_dd":    pred_dd,
-        "up_prob":    up_prob,
     }
 
 
@@ -1056,10 +1039,9 @@ def save_log(results: list[dict]):
 def _apply_scores(df: pd.DataFrame, models: dict) -> pd.DataFrame:
     X = df[FEATURES].fillna(0)
     df = df.copy()
-    df["up_prob"]       = models["clf"].predict_proba(X)[:, 1]
     df["pred_gain_pct"] = models["reg_gain"].predict(X) if models.get("reg_gain") else float("nan")
     df["pred_dd_pct"]   = models["reg_dd"].predict(X)   if models.get("reg_dd")   else float("nan")
-    df["score"] = df["pred_gain_pct"].fillna(0) * df["up_prob"]
+    df["score"] = df["pred_gain_pct"].fillna(0)          # rank by predicted gain (single model)
     if "id_pct" in df.columns:
         df["score"] += (
             df["id_pct"].fillna(0)            * 0.5
@@ -1189,7 +1171,7 @@ def run_all_day(client: MassiveClient, watchlist: list[dict],
             f"  Buy   : {entry_price:.4f} @ {entry_time} ET\n"
             f"  TP    : {pos['tp']:.4f} ({pos['tp_pct']:+.1f}%)\n"
             f"  SL    : {pos['sl']:.4f} ({pos['sl_pct']:+.1f}%)\n"
-            f"  Model : gain={g}  dd={dd}  up={pos['up_prob']*100:.0f}%"
+            f"  Model : gain={g}  dd={dd}"
         )
         return True
 

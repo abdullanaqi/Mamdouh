@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 import duckdb
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestClassifier
+from sklearn.ensemble import GradientBoostingRegressor
 
 warnings.filterwarnings("ignore")
 
@@ -196,6 +196,12 @@ def build_all_features(con, halal_list_sql) -> pd.DataFrame:
 # ════════════════════════════════ MODEL ════════════════════════════════
 
 def train_models(train_df: pd.DataFrame) -> dict:
+    """Single-model selection: one gradient-boosted regressor predicts the 30-min
+    gain and IS the ranking signal. A second regressor predicts drawdown and is
+    used ONLY to set the stop-loss (it does not affect selection). The old
+    RandomForest direction classifier was dropped -- it added nothing to name
+    selection (reg_gain alone matched reg_gain*up_prob: +5.91 vs +5.82 top-2
+    target_gain over 327 days, t=1.07, p=0.29)."""
     df = train_df.copy()
     for c in FEATURES:
         if c not in df:
@@ -205,12 +211,7 @@ def train_models(train_df: pd.DataFrame) -> dict:
         v = df[col].dropna()
         if len(v) > 100:
             df[col] = df[col].clip(v.quantile(0.02), v.quantile(0.98))
-    clf = RandomForestClassifier(n_estimators=300, max_depth=7, min_samples_leaf=8,
-                                 max_features="sqrt", class_weight="balanced",
-                                 random_state=42, n_jobs=-1)
-    m = df[df["label"].notna()]
-    clf.fit(m[FEATURES].fillna(0), m["label"])
-    models = {"clf": clf}
+    models = {}
     for tgt, name in (("target_gain", "reg_gain"), ("target_dd", "reg_dd")):
         sub = df[df[tgt].notna()]
         if len(sub) >= 200:
@@ -233,22 +234,21 @@ def score(df: pd.DataFrame, models: dict, skew: bool) -> pd.DataFrame:
     if skew:                                   # mimic live: premarket feats zeroed
         for c in SKEWED:
             X[c] = 0.0
-    df["up_prob"] = models["clf"].predict_proba(X)[:, 1]
     df["pred_gain_pct"] = models["reg_gain"].predict(X) if models.get("reg_gain") else np.nan
     df["pred_dd_pct"] = models["reg_dd"].predict(X) if models.get("reg_dd") else np.nan
-    df["score"] = df["pred_gain_pct"].fillna(0) * df["up_prob"]
+    df["score"] = df["pred_gain_pct"].fillna(-1e9)   # rank by predicted gain (single model)
     return df
 
 
 # ════════════════════════════════ TP/SL ════════════════════════════════
 
-def calc_tp_sl(entry, pred_gain, pred_dd, pm_pct, up_prob):
-    raw_tp = (pred_gain if not np.isnan(pred_gain) else pm_pct * 1.5) * (0.7 + 0.3 * up_prob)
+def calc_tp_sl(entry, pred_gain, pred_dd, pm_pct):
+    raw_tp = (pred_gain if not np.isnan(pred_gain) else pm_pct * 1.5) * 0.85
     tp_pct = float(raw_tp)
     raw_sl = pred_dd * 1.1 if (not np.isnan(pred_dd) and pred_dd < 0) else (
         -abs(pm_pct) * 0.5 if pm_pct != 0 else -1.0)
     sl_pct = float(raw_sl)
-    min_rr = 1.5 if up_prob < 0.6 else 1.0
+    min_rr = 1.3                                # fixed reward:risk floor (was up_prob-gated)
     tp_pct = float(max(tp_pct, abs(sl_pct) * min_rr))
     return tp_pct, sl_pct
 
@@ -367,8 +367,7 @@ def simulate_day(con, date_str, ranked: pd.DataFrame, mode: str,
             entry, ent_ns = ce
             tp_pct, sl_pct = calc_tp_sl(
                 entry, float(row.get("pred_gain_pct", np.nan)),
-                float(row.get("pred_dd_pct", np.nan)), float(row.get("pm_pct", 0.0)),
-                float(row["up_prob"]))
+                float(row.get("pred_dd_pct", np.nan)), float(row.get("pm_pct", 0.0)))
             open_pos[t] = dict(ticker=t, entry=entry, ent_ns=ent_ns,
                                tp_pct=tp_pct, sl_pct=sl_pct)
             traded.add(t)

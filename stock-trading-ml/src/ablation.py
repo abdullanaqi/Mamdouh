@@ -2,7 +2,7 @@
 set/structure constant and varies ONLY the selection method.
 
 Three rankings over the SAME candidate pool each day:
-  - model   : rank by model score (pred_gain * up_prob)            [the system]
+  - model   : rank by model score (predicted 30-min gain, single model)  [the system]
   - scanner : rank by the leak-free premarket gap-momentum scanner  (no ML)
   - random  : random pick from the same candidate pool (seeded)
 
