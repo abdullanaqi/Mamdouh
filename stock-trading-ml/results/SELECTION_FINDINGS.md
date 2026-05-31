@@ -4,6 +4,52 @@ This answers the question that started this: *"are you trading the same names?"*
 i.e. is the model's apparent edge real selection skill, or an artifact of it simply
 **taking more trades** than the baselines?
 
+---
+
+## FULL 2-YEAR RESULT (2025-01-02 .. 2026-05-29, 327 test days)
+
+`backtest_2yr.py` re-ran the whole test continuously over ~17 months (full 2025 incl.
+the spring selloff + recovery, plus 2026-to-date), streaming the data month-by-month
+(reused on-disk bars + Massive S3 flat files for the gap months). This is the headline;
+the 2026/bear2025 sections below are the original shorter windows.
+
+**Test A — selection only (no fills), 327 days, paired per-day:**
+
+| N | model | scanner | random | model−random (t) | model−scanner (t) |
+|---|-------|---------|--------|------------------|-------------------|
+| 1 | +6.63% | −0.07% | +0.01% | +6.62 (t=16.4) | +6.69 (t=10.5) |
+| 2 | +5.82% | +0.02% | +0.11% | +5.71 (t=20.2) | +5.81 (t=15.0) |
+| 5 | +4.15% | −0.16% | −0.04% | +4.19 (t=26.7) | +4.31 (t=22.8) |
+| 20 | +1.71% | −0.17% | −0.07% | +1.77 (t=33.3) | +1.88 (t=34.4) |
+
+All p≈0. Pool mean −0.08%; random ≈ 0 (unbiased baseline ✓). The selection edge is
+monotone in N and overwhelmingly significant across the full span and **both regimes** —
+the strongest evidence yet that the ML genuinely picks better names.
+
+**Test B — no-refill real fills, 327 days, 654 trades (2.0/day):**
+
+| method | win% | avg/trade | total |
+|--------|------|-----------|-------|
+| model (fixed) | 68.2% | **+1.38%** | +904% |
+| scanner (fixed) | 50.0% | −0.43% | −280% |
+| random (fixed) | 47.6% | −0.38% | −245% |
+| **model (pessimistic)** | 23.7% | **−1.83%** | **−1198%** |
+
+model − random day-PnL = +3.52%/day (t=10.6); model − scanner = +3.62%/day (t=9.7).
+
+**Model is positive in all 16 traded months** (fixed fills), +22% to +123%/month,
+including the Feb–May 2025 bear/crash and recovery. Consistency is striking.
+
+**The caveat is now even starker:** the *same 654 trades* swing from +904% (fixed fills)
+to −1198% (pessimistic) — a ~2,100% / ~3.2%-per-trade gap. Selection skill is proven and
+all-weather; **profit remains entirely hostage to execution quality**, which a bar-data
+backtest cannot resolve for thin small-caps.
+
+Artifacts: `backtest_2yr_summary.json`, `backtest_2yr_{fixed,pessimistic}.csv`,
+`ablation_2yr_norefill_{model,scanner,random}.csv`. Reproduce: `python3 src/backtest_2yr.py`.
+
+---
+
 ## The flaw it exposed in the old ablation
 
 The old `ablation.py` let each method trade a *different number* of names. The model
