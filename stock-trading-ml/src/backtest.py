@@ -41,9 +41,13 @@ OPEN_H, OPEN_M = 9, 30
 CLOSE_H, CLOSE_M = 15, 55
 SLIPPAGE = 0.001            # 10 bps per side, fixed mode only
 
+# A1/A2 FIX: news features dropped from the model. There is no historical news table,
+# so every backtest row has news=0 -- the model was validated entirely without news.
+# Feeding real news only in the live path was pure train/live skew plus a look-ahead leak
+# (post-open articles), with no validated benefit. Headlines are still shown to the
+# operator (display only), but never enter the model.
 FEATURES = [
     "pm_pct", "pm_momentum", "pm_vol_surge",
-    "news_sentiment", "news_count", "has_earnings", "has_fda",
     "open5_range_pct", "open5_vwap", "open5_volume", "open5_pct",
 ]
 # premarket features zeroed in the deployed live path (train/serve skew)
@@ -158,27 +162,29 @@ def _open5_and_label(con, df, date_str):
             df[c] = 0.0
         df[c] = df[c].fillna(0.0)
 
-    # label: price 30min after open > 09:30 open  (post-open 30-min direction)
-    o_s, o_e = utc_ns(date_str, OPEN_H, OPEN_M), utc_ns(date_str, OPEN_H, OPEN_M) + 60_000_000_000
-    p_e = utc_ns(date_str, OPEN_H, OPEN_M + POST_OPEN_MINS)
-    opens = con.execute(f"""SELECT ticker, open op FROM minute_bars
-        WHERE window_start>={o_s} AND window_start<{o_e} AND ticker IN ({tickers_sql})""").fetchdf()
-    closes = con.execute(f"""SELECT ticker, LAST(close ORDER BY window_start) pc FROM minute_bars
-        WHERE window_start>={o_e} AND window_start<{p_e} AND ticker IN ({tickers_sql})
+    # A3/B2 FIX: anchor the label at 09:35 -- the end of the open5 feature window and
+    # the first price actually tradable at decision time (entry confirms ~09:33-09:35).
+    # The old label anchored at the 09:30 open, which sits INSIDE the feature window and
+    # is not tradable. target_gain is now the return over the ACTUAL holding period
+    # (09:35 -> EOD close), matching the all-day hold instead of a 30-min window the
+    # strategy never respected.
+    a_s = utc_ns(date_str, OPEN_H, OPEN_M + 5)          # 09:35 anchor (open5 window closed)
+    a_e = a_s + 60_000_000_000                          # 09:35-09:36 bar (tradable entry ref)
+    i_e = utc_ns(date_str, CLOSE_H, CLOSE_M + 1)        # 15:56 EOD
+    anchor = con.execute(f"""SELECT ticker, FIRST(open ORDER BY window_start) ap
+        FROM minute_bars WHERE window_start>={a_s} AND window_start<{a_e} AND ticker IN ({tickers_sql})
         GROUP BY ticker""").fetchdf()
-    lab = opens.merge(closes, on="ticker", how="inner")
-    lab["label"] = (lab["pc"] > lab["op"]).astype(int)
-    lab["target_gain"] = (lab["pc"] - lab["op"]) / lab["op"] * 100
-    df = df.merge(lab[["ticker", "op", "pc", "label", "target_gain"]], on="ticker", how="left")
-    df = df.rename(columns={"op": "open_price", "pc": "post_open_close"})
-
-    # drawdown target: intraday low vs open
-    i_e = utc_ns(date_str, CLOSE_H, CLOSE_M + 1)
-    dd = con.execute(f"""SELECT ticker, MIN(low) lo, FIRST(open ORDER BY window_start) io
-        FROM minute_bars WHERE window_start>={o_s} AND window_start<{i_e} AND ticker IN ({tickers_sql})
+    hold = con.execute(f"""SELECT ticker, LAST(close ORDER BY window_start) ec, MIN(low) lo
+        FROM minute_bars WHERE window_start>={a_s} AND window_start<{i_e} AND ticker IN ({tickers_sql})
         GROUP BY ticker""").fetchdf()
-    dd["target_dd"] = (dd["lo"] - dd["io"]) / dd["io"].replace(0, np.nan) * 100
-    df = df.merge(dd[["ticker", "target_dd"]], on="ticker", how="left")
+    lab = anchor.merge(hold, on="ticker", how="inner")
+    lab = lab[lab["ap"] > 0]
+    lab["label"]       = (lab["ec"] > lab["ap"]).astype(int)
+    lab["target_gain"] = (lab["ec"] - lab["ap"]) / lab["ap"] * 100   # 09:35 -> EOD return
+    lab["target_dd"]   = (lab["lo"] - lab["ap"]) / lab["ap"] * 100   # worst drawdown over the hold
+    df = df.merge(lab[["ticker", "ap", "ec", "label", "target_gain", "target_dd"]],
+                  on="ticker", how="left")
+    df = df.rename(columns={"ap": "open_price", "ec": "post_open_close"})
     return df
 
 
@@ -196,8 +202,8 @@ def build_all_features(con, halal_list_sql) -> pd.DataFrame:
 # ════════════════════════════════ MODEL ════════════════════════════════
 
 def train_models(train_df: pd.DataFrame) -> dict:
-    """Single-model selection: one gradient-boosted regressor predicts the 30-min
-    gain and IS the ranking signal. A second regressor predicts drawdown and is
+    """Single-model selection: one gradient-boosted regressor predicts the
+    09:35->EOD hold return and IS the ranking signal. A second regressor predicts drawdown and is
     used ONLY to set the stop-loss (it does not affect selection). The old
     RandomForest direction classifier was dropped -- it added nothing to name
     selection (reg_gain alone matched reg_gain*up_prob: +5.91 vs +5.82 top-2

@@ -1,0 +1,22 @@
+{
+  "fixed": {
+    "trades": 154,
+    "win_rate": 48.7,
+    "total_pnl_pct": 36.75,
+    "avg_pnl_pct": 0.239,
+    "tp": 55,
+    "sl": 62,
+    "eod": 37,
+    "days": 77
+  },
+  "pessimistic": {
+    "trades": 154,
+    "win_rate": 38.3,
+    "total_pnl_pct": -148.38,
+    "avg_pnl_pct": -0.964,
+    "tp": 43,
+    "sl": 81,
+    "eod": 30,
+    "days": 77
+  }
+}

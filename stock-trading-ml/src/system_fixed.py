@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import pickle
@@ -22,13 +23,18 @@ from massive.rest.models import Agg, TickerSnapshot
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
 
-warnings.filterwarnings("ignore")
+# E3 FIX: scope warning suppression to the known-noisy categories instead of silencing
+# everything -- real data/dtype warnings (e.g. RuntimeWarning, pandas SettingWithCopy)
+# should still surface in a money-touching system.
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 load_dotenv(Path(__file__).parent / ".env")
 
 
 BASE_DIR        = Path(__file__).parent
 DB_PATH         = BASE_DIR / "data" / "market_data.duckdb"
 MODEL_PATH      = BASE_DIR / "results" / "models.pkl"
+MODEL_SHA_PATH  = BASE_DIR / "results" / "models.pkl.sha256"   # E2: integrity checksum sidecar
 HALAL_JSON      = BASE_DIR / "results" / "halal_stocks.json"
 LOG_PATH        = BASE_DIR / "results" / "live_log.csv"
 SESSION_LOG_DIR = BASE_DIR / "results" / "sessions"
@@ -52,12 +58,13 @@ POST_OPEN_MINS    = 30
 CLOSE_HOUR_ET     = 15
 CLOSE_MINUTE_ET   = 55
 
+# A1/A2 FIX: news features are NOT model inputs. No historical news table exists, so the
+# model was trained/validated with news=0; feeding real news only in the live path was
+# train/live skew plus a look-ahead leak (post-open articles). Headlines are still fetched
+# and shown to the operator (display only) but never scored.
 FEATURES = [
     # premarket — known before market open
     "pm_pct", "pm_momentum", "pm_vol_surge",
-    # news — known before market open
-    "news_sentiment", "news_count",
-    "has_earnings", "has_fda",
     # first 5 minutes after open — captured before entry confirmation
     "open5_range_pct", "open5_vwap", "open5_volume", "open5_pct",
 ]
@@ -115,7 +122,10 @@ class TeeLogger:
 
 def start_session_log(today: datetime, mode: str) -> TeeLogger:
     SESSION_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    fname = SESSION_LOG_DIR / f"session_{today.strftime('%Y-%m-%d')}_{mode}.log"
+    # E4 FIX: timestamp the filename so a same-day rerun does not overwrite the prior
+    # session's log (TeeLogger opens with mode "w").
+    stamp = now_et().strftime("%Y-%m-%d_%H%M%S")
+    fname = SESSION_LOG_DIR / f"session_{stamp}_{mode}.log"
     logger = TeeLogger(fname)
     print(f"Session log → {fname}")
     return logger
@@ -133,9 +143,13 @@ def _tg_send(text: str):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     for cid in chat_ids:
         try:
-            requests.post(url, json={"chat_id": cid, "text": text, "parse_mode": "HTML"}, timeout=5)
-        except Exception:
-            pass
+            resp = requests.post(url, json={"chat_id": cid, "text": text, "parse_mode": "HTML"}, timeout=5)
+            # E6 FIX: Telegram is the only real-time window into live trades -- never fail
+            # silently. Surface non-2xx and exceptions to the (tee'd) session log.
+            if resp.status_code >= 400:
+                print(f"  [tg] send to {cid} failed: HTTP {resp.status_code} {resp.text[:160]}")
+        except Exception as e:
+            print(f"  [tg] send to {cid} failed: {e}")
 
 
 def tg(text: str):
@@ -194,9 +208,15 @@ class MassiveClient:
                 return float(s.day.close), now_et().strftime("%H:%M:%S")
         return 0.0, now_et().strftime("%H:%M:%S")
 
-    def news(self, ticker: str, from_dt: datetime) -> list[dict]:
+    def news(self, ticker: str, from_dt: datetime, to_dt: datetime | None = None) -> list[dict]:
+        # A1 FIX: two-sided, point-in-time window. Upper bound (to_dt, e.g. 09:35 decision
+        # time) prevents pulling articles published AFTER the decision; lower bound captures
+        # the overnight window. (Display only -- news no longer feeds the model.)
         from_utc = from_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        articles = self._client.list_ticker_news(ticker, published_utc_gte=from_utc, limit=50)
+        kwargs = {"published_utc_gte": from_utc, "limit": 50}
+        if to_dt is not None:
+            kwargs["published_utc_lte"] = to_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        articles = self._client.list_ticker_news(ticker, **kwargs)
         result = []
         for a in articles:
             insights  = getattr(a, "insights", None) or []
@@ -387,8 +407,8 @@ def _sentiment_col(con, df: pd.DataFrame, date_str: str) -> pd.DataFrame:
         rows = con.execute(f"""
             SELECT ticker, sentiment, title FROM market_news
             WHERE ticker IN ({ticker_list})
-              AND CAST(published_et AS DATE) = DATE '{date_str}'
-        """).fetchall()
+              AND CAST(published_et AS DATE) = CAST(? AS DATE)
+        """, [date_str]).fetchall()                       # E1: parameterized date
     except Exception:
         df["news_sentiment"] = 0.0
         df["news_count"]     = 0
@@ -421,21 +441,27 @@ def _post_open_label(con, df: pd.DataFrame, date_str: str) -> pd.DataFrame:
     if df.empty:
         return df
     ticker_list = _ticker_sql_list(df["ticker"])
-    open_s = utc_ns(date_str, OPEN_HOUR_ET, OPEN_MINUTE_ET)
-    open_e = open_s + 60 * 1_000_000_000
-    post_e = utc_ns(date_str, OPEN_HOUR_ET, OPEN_MINUTE_ET + POST_OPEN_MINS)
+    # A3/B2 FIX: anchor the label at 09:35 -- the end of the open5 feature window and the
+    # first tradable price at decision time (entry confirms ~09:33-09:35). The old anchor
+    # was the 09:30 open, which sits INSIDE the feature window and is not tradable. The
+    # target is now the return over the ACTUAL hold (09:35 -> EOD close), not a 30-min window.
+    a_s = utc_ns(date_str, OPEN_HOUR_ET, OPEN_MINUTE_ET + 5)        # 09:35 anchor
+    a_e = a_s + 60 * 1_000_000_000                                 # 09:35-09:36 bar
+    eod = utc_ns(date_str, CLOSE_HOUR_ET, CLOSE_MINUTE_ET + 1)      # 15:56 EOD
     opens  = con.execute(f"""
-        SELECT ticker, open AS open_price FROM minute_bars
-        WHERE window_start >= {open_s} AND window_start < {open_e}
+        SELECT ticker, FIRST(open ORDER BY window_start) AS open_price FROM minute_bars
+        WHERE window_start >= {a_s} AND window_start < {a_e}
           AND ticker IN ({ticker_list})
+        GROUP BY ticker
     """).fetchdf()
     closes = con.execute(f"""
         SELECT ticker, LAST(close ORDER BY window_start) AS post_close FROM minute_bars
-        WHERE window_start >= {open_e} AND window_start < {post_e}
+        WHERE window_start >= {a_s} AND window_start < {eod}
           AND ticker IN ({ticker_list})
         GROUP BY ticker
     """).fetchdf()
     labeled = opens.merge(closes, on="ticker", how="inner")
+    labeled = labeled[labeled["open_price"] > 0]
     labeled["label"] = (labeled["post_close"] > labeled["open_price"]).astype(int)
     labeled = labeled.rename(columns={"post_close": "post_open_close"})
     return df.merge(labeled[["ticker", "open_price", "post_open_close", "label"]], on="ticker", how="left")
@@ -590,14 +616,15 @@ def _load_features_from_db(date_str: str | None = None) -> tuple[pd.DataFrame, p
             SELECT * FROM features
             WHERE date IN ({placeholders}) AND label IS NOT NULL AND post_open_close IS NOT NULL
         """, hist_dates).fetchdf()
-    today_df = con.execute(f"SELECT * FROM features WHERE date = '{target_date}'").fetchdf()
+    today_df = con.execute("SELECT * FROM features WHERE date = ?", [target_date]).fetchdf()  # E1: parameterized
     con.close()
     return train_df, today_df, target_date
 
 
 def _prepare_targets(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    # target_gain = post-open 30-min return, consistent with label (not full-day intraday_pct)
+    # target_gain = 09:35 -> EOD hold return (A3/B2 fix: anchored at the tradable 09:35
+    # price, measured over the actual all-day hold, consistent with the re-anchored label).
     if "post_open_close" in df.columns and "open_price" in df.columns:
         df["target_gain"] = np.where(
             df["open_price"] > 0,
@@ -606,10 +633,12 @@ def _prepare_targets(df: pd.DataFrame) -> pd.DataFrame:
         )
     else:
         df["target_gain"] = np.nan
-    if "intraday_low" in df.columns and "intraday_open" in df.columns:
+    # target_dd = worst drawdown over the hold, anchored at the same 09:35 price (open_price)
+    # rather than the 09:30 intraday_open, so the SL target matches the entry reference.
+    if "intraday_low" in df.columns and "open_price" in df.columns:
         df["target_dd"] = np.where(
-            df["intraday_open"] > 0,
-            (df["intraday_low"] - df["intraday_open"]) / df["intraday_open"] * 100,
+            df["open_price"] > 0,
+            (df["intraday_low"] - df["open_price"]) / df["open_price"] * 100,
             np.nan,
         )
     else:
@@ -661,12 +690,21 @@ def _train_regressor(df: pd.DataFrame, target_col: str, label: str) -> GradientB
 def _load_or_train(train_df: pd.DataFrame, n_hist: int, retrain: bool) -> dict:
     feat_sig = ",".join(sorted(FEATURES))
     if not retrain and MODEL_PATH.exists():
-        with open(MODEL_PATH, "rb") as f:
-            cached = pickle.load(f)
-        if cached.get("feat_sig") == feat_sig and cached.get("n_dates", 0) >= n_hist - 5:
-            print(f"  Cached models loaded (trained on {cached['n_dates']} dates)")
-            return cached["models"]
-        print("  Features changed or stale — retraining.")
+        # E2 FIX: models.pkl is unpickled into a money-touching process -- a tampered file
+        # = arbitrary code execution. Verify a sha256 written by us at save time before
+        # trusting it. Trust boundary: only load a pickle this process produced. If the
+        # sidecar is missing or mismatched, refuse the cache and retrain from the DB.
+        raw = MODEL_PATH.read_bytes()
+        sig_ok = (MODEL_SHA_PATH.exists()
+                  and MODEL_SHA_PATH.read_text().strip() == hashlib.sha256(raw).hexdigest())
+        if not sig_ok:
+            print("  Model checksum missing/mismatch — refusing cached pickle, retraining.")
+        else:
+            cached = pickle.loads(raw)
+            if cached.get("feat_sig") == feat_sig and cached.get("n_dates", 0) >= n_hist - 5:
+                print(f"  Cached models loaded (trained on {cached['n_dates']} dates)")
+                return cached["models"]
+            print("  Features changed or stale — retraining.")
 
     print(f"  Training on {len(train_df):,} rows from {n_hist} dates …")
     if train_df.empty or len(train_df) < 200:
@@ -678,9 +716,10 @@ def _load_or_train(train_df: pd.DataFrame, n_hist: int, retrain: bool) -> dict:
         "reg_dd":   _train_regressor(df, "target_dd",   "drawdown%"),
     }
     MODEL_PATH.parent.mkdir(exist_ok=True)
-    with open(MODEL_PATH, "wb") as f:
-        pickle.dump({"models": models, "n_dates": n_hist, "feat_sig": feat_sig}, f)
-    print(f"  Models saved → results/models.pkl")
+    blob = pickle.dumps({"models": models, "n_dates": n_hist, "feat_sig": feat_sig})
+    MODEL_PATH.write_bytes(blob)
+    MODEL_SHA_PATH.write_text(hashlib.sha256(blob).hexdigest())   # E2: integrity sidecar
+    print(f"  Models saved → results/models.pkl (+ .sha256)")
     return models
 
 
@@ -765,7 +804,10 @@ def _premarket_live(client: MassiveClient, ticker: str, today: datetime) -> dict
 
 def build_features(client: MassiveClient, tickers: list[str], today: datetime) -> pd.DataFrame:
     mkt_open  = today.replace(hour=9,  minute=30, second=0, microsecond=0)
-    news_from = today.replace(hour=0,  minute=0,  second=0, microsecond=0)
+    # A1/A2 FIX: two-sided news window -- prior-day 16:00 ET (overnight) up to the 09:35
+    # decision time. Bounded on BOTH ends so it can't pick up post-decision articles.
+    news_from = (today - timedelta(days=1)).replace(hour=16, minute=0, second=0, microsecond=0)
+    news_to   = today.replace(hour=9,  minute=35, second=0, microsecond=0)
     id_end    = now_et().replace(second=0, microsecond=0)
     total     = len(tickers)
 
@@ -783,6 +825,11 @@ def build_features(client: MassiveClient, tickers: list[str], today: datetime) -
             id_open_p = idf["open"].iloc[0]
             if not id_open_p:
                 return None
+            # B3 FIX: the model's open5_* features assume a full 5-minute post-open window
+            # (idf is fetched from 09:30 onward). If fewer than 5 bars exist yet (scoring
+            # before ~09:35), skip rather than feed partial-window features it never trained on.
+            if len(idf) < 5:
+                return {"ticker": ticker, "_error": "open5 not ready (<5 post-open bars)"}
 
             # full intraday — for display only, NOT fed into model
             id_close   = idf["close"].iloc[-1]
@@ -812,7 +859,7 @@ def build_features(client: MassiveClient, tickers: list[str], today: datetime) -
             # normalized: vwap distance from open (%), not absolute price
             o5_vwap         = (o5_vwap_abs - o5_open) / o5_open * 100 if o5_open else 0.0
 
-            news_items   = client.news(ticker, news_from)
+            news_items   = client.news(ticker, news_from, news_to)
             sentiments   = [SENTIMENT_MAP.get((n.get("sentiment") or "").lower().strip(), 0.0) for n in news_items]
             avg_sent     = float(np.mean(sentiments)) if sentiments else 0.0
             has_earnings = int(any(n.get("is_earnings") for n in news_items))
@@ -1037,8 +1084,8 @@ def save_log(results: list[dict]):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _apply_scores(df: pd.DataFrame, models: dict) -> pd.DataFrame:
+    df = _ensure_features(df.copy())   # E7: never KeyError mid-session on a missing feature column
     X = df[FEATURES].fillna(0)
-    df = df.copy()
     df["pred_gain_pct"] = models["reg_gain"].predict(X) if models.get("reg_gain") else float("nan")
     df["pred_dd_pct"]   = models["reg_dd"].predict(X)   if models.get("reg_dd")   else float("nan")
     df["score"] = df["pred_gain_pct"].fillna(0)          # rank by predicted gain (single model)
@@ -1189,10 +1236,14 @@ def run_all_day(client: MassiveClient, watchlist: list[dict],
     pos_lock:       threading.Lock  = threading.Lock()
     reentry_active: threading.Event = threading.Event()
 
+    ws_state = {"last_msg": time.time(), "reconnects": 0}
+    stop_ws  = threading.Event()
+
     def _ws_handler(msgs):
         # FIX(thread-safety): don't read open_pos from the WS thread (it's mutated
         # under pos_lock by the consumer). Queue every tick; the consumer filters
         # to currently-open symbols while holding the lock.
+        ws_state["last_msg"] = time.time()          # D1: liveness heartbeat
         for m in msgs:
             sym = getattr(m, "symbol", None)
             px  = getattr(m, "price",  None)
@@ -1200,8 +1251,27 @@ def run_all_day(client: MassiveClient, watchlist: list[dict],
                 trade_q.put((sym, float(px)))
 
     api_key = os.getenv("MASSIVE_API_KEY", "").strip()
-    ws = WebSocketClient(api_key=api_key, subscriptions=[f"T.{t}" for t in all_watch])
-    threading.Thread(target=ws.run, kwargs={"handle_msg": _ws_handler}, daemon=True).start()
+
+    def _ws_supervisor():
+        # D1 FIX: the WS is the primary exit trigger over a 6.5h session and can drop
+        # silently. Run it under a supervisor that reconnects with exponential backoff;
+        # the REST poll below is the backstop while it is down.
+        backoff = 1
+        while not stop_ws.is_set():
+            try:
+                ws = WebSocketClient(api_key=api_key, subscriptions=[f"T.{t}" for t in all_watch])
+                ws_state["last_msg"] = time.time()
+                ws.run(handle_msg=_ws_handler)      # blocks until the socket drops
+            except Exception as e:
+                print(f"  [ws] error: {e}")
+            if stop_ws.is_set():
+                break
+            ws_state["reconnects"] += 1
+            print(f"  [ws] disconnected — reconnecting in {backoff}s (#{ws_state['reconnects']}) …")
+            stop_ws.wait(backoff)
+            backoff = min(backoff * 2, 30)
+
+    threading.Thread(target=_ws_supervisor, daemon=True).start()
     print(f"  WS subscribed: {', '.join(sorted(all_watch))}")
 
     def _do_reentry():
@@ -1226,7 +1296,30 @@ def run_all_day(client: MassiveClient, watchlist: list[dict],
             print("  No new entries confirmed.")
         reentry_active.clear()
 
-    last_status = time.time()
+    def _maybe_exit(sym: str, price: float) -> bool:
+        # Shared exit check for both the WS tick path and the REST poll backstop.
+        # FIX(fills): book the exit at the ACTUAL crossing price (minus slippage), not the
+        # idealized TP/SL level -- a gap straight through a level must not book best-case.
+        with pos_lock:
+            if sym not in open_pos:
+                return False
+            p = open_pos[sym]
+            if price >= p["tp"]:
+                reason, exit_price = "TP", price * (1 - SLIPPAGE)
+            elif price <= p["sl"]:
+                reason, exit_price = "SL", price * (1 - SLIPPAGE)
+            else:
+                return False
+            results.append(_log_exit(p, exit_price, reason))
+            del open_pos[sym]
+            save_state(open_pos, today_str)
+        if REFILL and not reentry_active.is_set():
+            reentry_active.set()
+            threading.Thread(target=_do_reentry, daemon=True).start()
+        return True
+
+    POLL_SECS, WS_STALE_SECS = 20, 45
+    last_status, last_poll = time.time(), time.time()
 
     while True:
         try:
@@ -1234,6 +1327,22 @@ def run_all_day(client: MassiveClient, watchlist: list[dict],
         except queue.Empty:
             if now_et() >= CLOSE_TIME:
                 break
+            # D2 FIX: REST backstop. TP/SL must fire even when no trade tick arrives
+            # (thinly traded names cross on the quote) or the WS is down -- poll each open
+            # position's last price and run the same exit check.
+            if open_pos and time.time() - last_poll >= POLL_SECS:
+                stale = time.time() - ws_state["last_msg"]
+                if stale > WS_STALE_SECS:
+                    print(f"  [ws] silent {stale:.0f}s — exits via REST backstop"
+                          f" ({ws_state['reconnects']} reconnect(s) so far)")
+                for tk in list(open_pos.keys()):
+                    try:
+                        px, _ = client.price(tk)
+                    except Exception:
+                        px = 0.0
+                    if px and px > 0:
+                        _maybe_exit(tk, px)
+                last_poll = time.time()
             if time.time() - last_status >= 60 and open_pos:
                 et_now = now_et()
                 print(f"\n  ── {et_now.strftime('%H:%M:%S')} ET (heartbeat) ─────────────────────")
@@ -1244,36 +1353,19 @@ def run_all_day(client: MassiveClient, watchlist: list[dict],
                 last_status = time.time()
             continue
 
-        with pos_lock:
-            if sym not in open_pos:
-                continue
-            p   = open_pos[sym]
-            pnl = (price - p["entry"]) / p["entry"] * 100
-            # FIX(fills): book the exit at the ACTUAL crossing tick (minus slippage),
-            # not the idealized TP/SL level. The original recorded `p["tp"]`/`p["sl"]`
-            # exactly, so a gap straight through a level booked the best-case price.
-            if price >= p["tp"]:
-                reason, exit_price = "TP", price * (1 - SLIPPAGE)
-            elif price <= p["sl"]:
-                reason, exit_price = "SL", price * (1 - SLIPPAGE)
-            else:
+        if not _maybe_exit(sym, price):
+            p = open_pos.get(sym)
+            if p:
                 to_tp = (p["tp"] - price) / price * 100
                 to_sl = (price - p["sl"]) / price * 100
+                pnl   = (price - p["entry"]) / p["entry"] * 100
                 print(f"  {sym:<8} px={price:.4f}  pnl={pnl:>+.2f}%  →TP={to_tp:>+.2f}%  →SL={to_sl:>+.2f}%")
-                continue
-            result = _log_exit(p, exit_price, reason)
-            results.append(result)
-            del open_pos[sym]
-            save_state(open_pos, today_str)
-
-        if REFILL and not reentry_active.is_set():
-            reentry_active.set()
-            threading.Thread(target=_do_reentry, daemon=True).start()
 
         last_status = time.time()
         if now_et() >= CLOSE_TIME:
             break
 
+    stop_ws.set()                    # D1: stop the WS supervisor before EOD cleanup
     if open_pos:
         print(f"\n  15:55 ET — force-closing {len(open_pos)} remaining position(s).")
         for ticker, p in list(open_pos.items()):
