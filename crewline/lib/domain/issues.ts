@@ -46,6 +46,19 @@ export async function listIssues(orgId: string, status?: 'open' | 'acknowledged'
     .orderBy(desc(issues.createdAt));
 }
 
+export async function applyIssueTriage(
+  orgId: string,
+  issueId: string,
+  triage: { severity: 'low' | 'medium' | 'high'; aiSummary: string },
+) {
+  const rows = await db
+    .update(issues)
+    .set({ severity: triage.severity, aiSummary: triage.aiSummary })
+    .where(and(eq(issues.orgId, orgId), eq(issues.id, issueId)))
+    .returning();
+  return rows[0] ?? null;
+}
+
 export async function setIssueStatus(
   orgId: string,
   issueId: string,

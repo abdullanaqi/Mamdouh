@@ -1,5 +1,5 @@
 import 'server-only';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -47,4 +47,18 @@ export async function putObject(
 
 export function localStoragePath(key: string): string {
   return join(LOCAL_DIR, key);
+}
+
+/** Read object bytes back (used by the nightly photo quality scan). */
+export async function getObject(key: string): Promise<Buffer | null> {
+  const driver = process.env.STORAGE_DRIVER ?? 'local';
+  if (driver === 'local') {
+    try {
+      return await readFile(join(LOCAL_DIR, key));
+    } catch {
+      return null;
+    }
+  }
+  // r2 read not provisioned in this build (HANDBACK).
+  return null;
 }

@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/empty-state';
+import { MessageReplyButton } from '@/components/messages/reply-button';
+import { aiEnabled } from '@/lib/ai/enabled';
 
 export default async function MessagesPage() {
   const auth = await requireOwner();
@@ -100,7 +102,13 @@ export default async function MessagesPage() {
                   <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
                     {message.channel} ·{' '}
                     {DateTime.fromJSDate(message.createdAt, { zone: tz }).toFormat('LLL d, h:mm a')}
+                    {message.aiGenerated ? ' · AI draft' : ''}
                   </p>
+                  {message.direction === 'inbound' && (
+                    <div className="mt-2">
+                      <MessageReplyButton messageId={message.id} aiEnabled={aiEnabled()} />
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
