@@ -4,10 +4,13 @@ import { requireCrew } from '@/lib/auth/context';
 import { logout } from '@/app/actions/auth';
 import { Button } from '@/components/ui/button';
 import { CrewServiceWorker } from '@/components/crew-sw';
+import { OfflineProvider } from '@/components/crew/offline-provider';
+import { OfflineIndicator } from '@/components/crew/offline-indicator';
 
 export default async function CrewLayout({ children }: { children: React.ReactNode }) {
   const auth = await requireCrew();
   return (
+    <OfflineProvider>
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-[var(--color-background)]">
       <CrewServiceWorker />
       <header className="flex items-center justify-between border-b border-[var(--color-border)] p-4">
@@ -15,7 +18,10 @@ export default async function CrewLayout({ children }: { children: React.ReactNo
           <Sparkles className="size-5 text-[var(--color-primary)]" />
           <span className="font-semibold">Crewline</span>
         </div>
-        <span className="text-sm text-[var(--color-muted-foreground)]">{auth.fullName}</span>
+        <div className="flex items-center gap-2">
+          <OfflineIndicator />
+          <span className="text-sm text-[var(--color-muted-foreground)]">{auth.fullName}</span>
+        </div>
       </header>
 
       <main className="flex-1 p-4 pb-24">{children}</main>
@@ -34,5 +40,6 @@ export default async function CrewLayout({ children }: { children: React.ReactNo
         </form>
       </nav>
     </div>
+    </OfflineProvider>
   );
 }
