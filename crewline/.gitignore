@@ -1,0 +1,36 @@
+# dependencies
+/node_modules
+.pnp
+.pnp.js
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# env
+.env
+.env.test
+.env*.local
+
+# misc
+.DS_Store
+*.pem
+.vscode/
+.idea/
+
+# debug
+npm-debug.log*
+pnpm-debug.log*
+
+# testing
+/coverage
+
+# local storage driver output (proof photos in dev)
+/.local-storage
+
+# typescript
+*.tsbuildinfo
