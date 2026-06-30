@@ -6,3 +6,5 @@ export async function POST(req: Request) {
   const created = await runMaterializeAllOrgs(14);
   return Response.json({ ok: true, created });
 }
+
+export const GET = POST;

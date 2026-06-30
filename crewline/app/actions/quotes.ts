@@ -7,12 +7,17 @@ import { generateQuote, writeProposal } from '@/lib/ai/capabilities';
 import { quoteInputSchema } from '@/lib/ai/schemas';
 import {
   createQuote,
+  getQuote,
   pastQuotesForCalibration,
   setQuoteStatus,
   updateQuoteProposal,
+  type QuoteLineItem,
 } from '@/lib/domain/quotes';
 import { getOrg } from '@/lib/domain/org';
 import { getClient } from '@/lib/domain/clients';
+import { saveOutboundMessage } from '@/lib/domain/messages';
+import { sendEmail } from '@/lib/integrations/email';
+import { quoteEmail } from '@/emails/templates';
 import type { FormState } from './clients';
 
 function num(v: FormDataEntryValue | null): number | undefined {
@@ -96,4 +101,45 @@ export async function setQuoteStatusAction(formData: FormData): Promise<void> {
   await setQuoteStatus(auth.orgId, quoteId, status);
   revalidatePath(`/quotes/${quoteId}`);
   revalidatePath('/quotes');
+}
+
+/** Send the proposal to the client by email, then mark the quote sent. */
+export async function sendQuoteAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const auth = await requireOwner();
+  const quoteId = String(formData.get('quoteId'));
+  const toOverride = (formData.get('to') as string) || '';
+  const quote = await getQuote(auth.orgId, quoteId);
+  if (!quote) return { error: 'Quote not found.' };
+
+  const org = await getOrg(auth.orgId);
+  const client = quote.clientId ? await getClient(auth.orgId, quote.clientId) : null;
+  const to = toOverride || client?.contactEmail || '';
+  if (!to) return { error: 'No recipient email. Enter one or set the client contact email.' };
+
+  const lineItems = (quote.lineItemsJson as QuoteLineItem[] | null) ?? [];
+  const email = quoteEmail({
+    companyName: org?.name ?? 'Your cleaning company',
+    clientName: client?.name ?? quote.prospectName ?? 'there',
+    proposalText: quote.proposalText ?? 'Please see the attached proposal.',
+    lineItems: lineItems.map((li) => ({ description: li.description, amountCents: li.amountCents })),
+    totalCents: quote.totalCents,
+    frequency: quote.frequency,
+  });
+
+  const res = await sendEmail({ to, subject: email.subject, html: email.html, text: email.text });
+  if (!res.ok) return { error: `Email failed (${res.driver}): ${res.error ?? 'unknown'}` };
+
+  await setQuoteStatus(auth.orgId, quoteId, 'sent');
+  await saveOutboundMessage(auth.orgId, {
+    clientId: quote.clientId,
+    body: `Quote ${formatTotal(quote.totalCents)} sent to ${to}`,
+    channel: 'email',
+    status: 'sent',
+  });
+  revalidatePath(`/quotes/${quoteId}`);
+  return { ok: true };
+}
+
+function formatTotal(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
 }

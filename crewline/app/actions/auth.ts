@@ -122,7 +122,7 @@ export async function signup(_prev: ActionState, formData: FormData): Promise<Ac
   });
 
   await setSession({ userId, orgId, role });
-  redirect('/dashboard');
+  redirect('/onboarding');
 }
 
 export async function logout() {

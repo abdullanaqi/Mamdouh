@@ -124,6 +124,20 @@ async function main() {
   // requireOwner redirects to /login. The site name must never leak.
   check('foreign org does not see the shift site name', !foreignHtml.includes('North Office'));
 
+  console.log('8) Cron routes: secret required + jobs run');
+  const cronSecret = process.env.CRON_SECRET;
+  const noSecret = await fetch(`${BASE}/api/cron/mark-missed`, { method: 'POST' });
+  check('cron without secret 401', noSecret.status === 401, `status=${noSecret.status}`);
+
+  for (const path of ['materialize', 'mark-missed', 'invoice-reminders']) {
+    const r = await fetch(`${BASE}/api/cron/${path}`, {
+      method: 'POST',
+      headers: { 'x-cron-secret': cronSecret ?? '' },
+    });
+    const j = await r.json().catch(() => ({}));
+    check(`cron ${path} 200 with secret`, r.status === 200 && j.ok === true, `status=${r.status} ${JSON.stringify(j)}`);
+  }
+
   await sql.end();
   console.log(failures === 0 ? '\nALL E2E CHECKS PASSED' : `\n${failures} E2E CHECK(S) FAILED`);
   process.exit(failures === 0 ? 0 : 1);

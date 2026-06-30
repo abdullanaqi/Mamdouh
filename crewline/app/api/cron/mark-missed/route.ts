@@ -6,3 +6,5 @@ export async function POST(req: Request) {
   const missed = await runMarkMissedAllOrgs();
   return Response.json({ ok: true, missed });
 }
+
+export const GET = POST;

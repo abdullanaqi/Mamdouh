@@ -15,6 +15,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),
+      // `server-only`/`client-only` are RSC runtime guards with no behavior to
+      // test; stub them so server modules can be unit-tested under node.
+      'server-only': path.resolve(__dirname, 'tests/stubs/empty.ts'),
+      'client-only': path.resolve(__dirname, 'tests/stubs/empty.ts'),
     },
   },
 });

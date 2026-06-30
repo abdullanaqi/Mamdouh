@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ProposalEditor } from '@/components/quotes/proposal-editor';
+import { SendQuoteButton } from '@/components/quotes/send-quote-button';
+import { getClient } from '@/lib/domain/clients';
 import { formatCents } from '@/lib/utils';
 import type { QuoteLineItem } from '@/lib/domain/quotes';
 
@@ -18,6 +20,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
   const quote = await getQuote(auth.orgId, id);
   if (!quote) notFound();
   const lineItems = (quote.lineItemsJson as QuoteLineItem[] | null) ?? [];
+  const client = quote.clientId ? await getClient(auth.orgId, quote.clientId) : null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -91,8 +94,13 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
         <CardHeader>
           <CardTitle>Status</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          {(['sent', 'won', 'lost'] as const).map((s) => (
+        <CardContent className="flex flex-wrap items-center gap-2">
+          <SendQuoteButton
+            quoteId={quote.id}
+            defaultEmail={client?.contactEmail ?? ''}
+            disabled={quote.status !== 'draft'}
+          />
+          {(['won', 'lost'] as const).map((s) => (
             <form key={s} action={setQuoteStatusAction}>
               <input type="hidden" name="quoteId" value={quote.id} />
               <input type="hidden" name="status" value={s} />
