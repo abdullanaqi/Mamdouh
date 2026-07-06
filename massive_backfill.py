@@ -216,6 +216,9 @@ def main():
     ap.add_argument("--to", dest="d1", required=True)
     ap.add_argument("--top", type=int, default=12)
     ap.add_argument("--min-gap", type=float, default=2.0)
+    ap.add_argument("--max-gap", type=float, default=0.0,
+                    help="drop premarket gaps above this %% (0 = no cap). "
+                         "Extreme gappers gap through stops -> deep drawdowns.")
     ap.add_argument("--min-price", type=float, default=5.0)
     ap.add_argument("--max-price", type=float, default=100.0)
     ap.add_argument("--min-pm-dollar", type=float, default=300_000.0)
@@ -298,6 +301,8 @@ def main():
                 continue
             gap = (px / pc - 1) * 100
             if gap < args.min_gap:
+                continue
+            if args.max_gap and gap > args.max_gap:
                 continue
             hist = pm_hist.get(t, [])
             base = float(np.mean(hist)) if len(hist) >= 5 else 0.0
