@@ -1,0 +1,13 @@
+pandas>=2.1
+numpy>=1.26
+pyarrow>=14
+boto3>=1.34
+# <1.9: sklearn 1.9 crashes on all-NaN feature columns inside
+# HistGradientBoosting binning (0 distinct values unguarded)
+scikit-learn>=1.4,<1.9
+scipy>=1.11
+tqdm>=4.66
+python-dotenv>=1.0
+pytest>=8.0
+# optional, only for the LLM research advisor:
+anthropic>=0.39
