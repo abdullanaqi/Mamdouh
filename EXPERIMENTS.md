@@ -183,3 +183,53 @@ Recommended next moves (pick one, one change at a time):
      intrinsic to fixed-stop gapper entries.
 
 ---
+
+## E4 — "market acceptance / continuation" study (user hypothesis)
+Question: of premarket top gainers, which does the market ACCEPT (hold + keep
+going after the open) vs fade — and is that subset a tradeable edge?
+
+ANALYSIS (idealized, on e2 top-24 18mo, pooled over all candidates):
+- "first-5-min green = accepted" barely predicts continuation: P(label) 47.1 vs
+  45.5%. Strength buckets non-monotonic: BOTH extremes fade (open5<-2% -> 42%,
+  open5>+5% blow-off -> 39%); moderate 0..+5% best (~49%). Same extreme=fade
+  lesson as the gap cap.
+- Buying confirmed strength at 09:35 LOSES (-1.7%/tr, 36% win) — by the time
+  acceptance is visible you buy the local top and it mean-reverts.
+- Clean entry-at-OPEN, either direction: ~-0.2% (no directional edge).
+- Apparent "+2.588% buy-the-dip" (open5<=0, 09:35 entry, EOD hold) is a
+  DENOMINATOR/tail artifact: 63% of profit from top 2% of trades; extreme dips
+  divide by a tiny post-dip price. Mean>>median for deep dips.
+- MILD dips (open5 -5..0) are clean (mean~=median): ~57% win, +0.9% median,
+  consistent 2025 AND 2026(OOS). BUT fragile to fills: at 0.3% worse entry
+  ~55% win/+0.7%; at 0.6% ~53%; at 1.0% the edge is GONE. Magnitude still
+  survivorship-inflated.
+
+RIGOROUS TEST (encoded in the engine, judged on holdout, conservative fills):
+- As an ENTRY (`open_dip`, enter on mild 09:35 pullback): fires only 3x in the
+  whole validation window (0% win). In a 1/day system the single ranked pick is
+  almost always green at the open, so the entry never triggers — the pooled
+  effect was really a SELECTION property, not entry timing.
+- As a SELECTION rank (`dip_revert`, pick the mild-dip candidate): scored
+  -0.743%/day, 34.4% win, maxDD -61% — one of the WORST rankings. REFUTED.
+- The ranking that WON validation was `rank:open5_pct` (+2.364%/day, 41% win) =
+  pick the candidate with the STRONGEST first-5-min continuation. The exact
+  OPPOSITE of the mild-dip idea.
+
+RESULT: **Mild-dip mean-reversion REFUTED by rigorous testing** — it was a
+mirage of pooled, idealized, survivorship-inflated math; it does not survive
+conservative fills + 1-pick-per-day. No NEW edge found. Both experimental hooks
+(`open_dip` entry, `dip_revert` rank) reverted from edited.py; engine unchanged
+(synthetic --quick honesty path verified). The one consistently-surviving signal
+remains CONTINUATION selection (`rank:open5_pct` = buy the strongest continuer),
+which PARTLY VINDICATES the user's instinct ("trade what the market accepts and
+keeps going") — but it still fails the -15% drawdown gate for forced-daily and
+its magnitudes are survivorship-inflated. Nothing proven.
+
+METHOD NOTE: 4+ encodings now tried on the same holdout. Each extra try raises
+false-discovery risk. Further edge-hunting on this backfilled top-gainer data is
+hitting diminishing returns; the real unlocks are (1) survivorship-free /
+richer data (float, borrow, NBBO, halal classification) and (2) PAPER TRADING —
+the only test that can confirm any signal. Continued backtest mining will not
+substitute for either.
+
+---
