@@ -49,7 +49,10 @@ load_dotenv(Path(__file__).parent / ".env")
 
 
 BASE_DIR        = Path(__file__).parent
-DB_PATH         = BASE_DIR / "data" / "market_data.duckdb"
+# DB path is overridable via MAMDOUH_DB so research experiments can point at
+# alternate DuckDB files without touching the canonical one. Defaults to the
+# usual location; no behavior change when the env var is unset.
+DB_PATH         = Path(os.getenv("MAMDOUH_DB") or (BASE_DIR / "data" / "market_data.duckdb"))
 MODEL_PATH      = BASE_DIR / "result v2" / "models.pkl"
 HALAL_JSON      = BASE_DIR / "results" / "halal_stocks.json"
 LOG_PATH        = BASE_DIR / "result v2" / "live_log.csv"
