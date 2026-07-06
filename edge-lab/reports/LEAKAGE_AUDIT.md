@@ -1,12 +1,10 @@
 # Leakage audit
-_Generated 2026-07-06 03:54 UTC · Data: SYNTHETIC_
-
-> **WARNING: SYNTHETIC DATA.** These numbers verify code plumbing only. They are NOT evidence of any market edge.
+_Generated 2026-07-06 19:00 UTC · Data: REAL Massive flat files_
 
 
 ## Structural future-invariance check
 - tickers checked: 25
-- decision times: ['2025-07-01 09:45:00-04:00', '2025-07-01 11:00:00-04:00', '2025-07-01 14:30:00-04:00']
+- decision times: ['2024-07-03 09:45:00-04:00', '2024-07-03 11:00:00-04:00', '2024-07-03 14:30:00-04:00']
 - clean: **True**
 - leaking features: `{}`
 
