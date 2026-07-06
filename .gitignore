@@ -1,0 +1,7 @@
+# local data & experiment outputs (MAMDOUH engine)
+data/
+result v2/
+*.duckdb
+.env
+__pycache__/
+*.pyc
