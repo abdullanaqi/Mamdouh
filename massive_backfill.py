@@ -44,6 +44,11 @@ import botocore
 import duckdb
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
+
+# Load flat-files credentials from the project .env (same file edited.py uses)
+# so `python massive_backfill.py` works without a separate `export` step.
+load_dotenv(Path(__file__).parent / ".env")
 
 ET = ZoneInfo("America/New_York")
 TICKER_RE = re.compile(r"^[A-Z]{1,5}$")
