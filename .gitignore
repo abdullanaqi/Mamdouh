@@ -1,7 +1,7 @@
 # local data & experiment outputs (MAMDOUH engine)
 data/
 result v2/
-ff_tmp/
+ff_tmp*/
 *.duckdb
 .env
 __pycache__/
