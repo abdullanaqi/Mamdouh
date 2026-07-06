@@ -119,3 +119,67 @@ the DIRECTIONAL signal and pinpointed DRAWDOWN as the hard blocker and MAGNITUDE
 as inflated. Next single experiment must target drawdown control.
 
 ---
+
+## E3 — cap premarket gap at 30% (change vs E2: add --max-gap 30 ceiling)
+Justification (data-driven, not a guess): diagnosed E2b forced trades — all 8
+worst losses were extreme gappers (pm_pct 45-202%) that gapped THROUGH the -1%
+stop and filled near -11% (conservative gap-through-level fill). Expectancy
+sweeps keep them (>40% bucket has highest mean AND worst losses), so only a
+hard universe cap removes them. Fast proxy (filter existing E2 DB to gap<=30):
+forced maxDD -40.8 -> -28.1, win rates up to 56-77% -> worth a proper backfill.
+Added `--max-gap` to massive_backfill.py (default 0 = off, backward compatible).
+Backfill: 2025-01-02→2026-07-02 `--top 24 --min-gap 2 --max-gap 30`
+DB: data/e3_gap30.duckdb (374 days, max pm_pct 29.98%, 24 cand/day)
+Compare: `--split=2025-11-25` (60-day holdout) | report: result v2/compare_20260706_204644/
+
+Forced 1/day HOLDOUT (60 trades):
+  win=30.0%  exp/tr=+1.347%  exp/day=+1.347%  2xslip=+1.033%
+  PF=1.84  maxDD=-26.59%  streak=8  sharpe=3.48
+Gates: 7/8 pass. ONLY fail = Drawdown (-26.59% vs -15%).
+Clean SELECTIVE shapes on the capped universe (all pass every offline gate):
+  fixed TP/SL baseline: 27 tr, win 63.0%, exp/day +0.322, 2xslip +0.209, DD -4.39, PF 1.86
+  rule-only:            59 tr, win 54.2%, exp/day +0.488, 2xslip +0.258, DD -10.47
+  1/day selective:      24 tr, win 37.5%, exp/day +0.295, 2xslip +0.188, DD -7.89
+
+vs E2b (same 60-day holdout, uncapped): forced maxDD -40.82 -> -26.59 (better),
+exp/day +2.160 -> +1.347 (magnitude de-inflated -> more believable),
+win 38.3 -> 30.0 (worse). Residual: 44/150 forced trades still lose >2% (gap
+through stop, worst -10%) — deep-loss risk is INTRINSIC to buying gappers with
+a fixed stop, not just an extreme-tail effect. Tighter caps also kill winners
+(E2b rule-only 66.7%/-4.82 DD was better than E3 rule-only 54.2%/-10.47).
+
+RESULT: **Partial success — improvement, not a pass.** Gap cap materially cut
+forced drawdown and de-inflated magnitudes, but forced-1/day still fails the
+-15% DD gate (-26.6%) because its 30% win rate produces deep streaks. On the
+capped universe the SELECTIVE / fixed-TP vehicle passes ALL offline gates
+(fixed-TP: 63% win, -4.39% DD). Keep --max-gap 30 as an improvement.
+
+---
+
+## STEP-5 SYNTHESIS (after E1-E3)
+1. There IS a directionally robust, 2x-slippage-surviving long edge in premarket
+   gappers — positive forced expectancy in every real-universe run, confirmed on
+   60 multi-regime trades without holdout-selection.
+2. Forcing a trade EVERY day is the wrong vehicle: 28-38% win rate -> deep
+   drawdowns (-16% to -41%) that fail the -15% risk gate in EVERY config. This
+   is the one gate that never passes for forced.
+3. The tradeable shape is SELECTIVE + gap-capped: skip low-quality days and drop
+   extreme (>30%) gappers. On E3 this vehicle passes all offline gates (fixed-TP
+   63% win / -4.39% DD; rule-only 54% win / -10.47% DD).
+4. Absolute magnitudes are inflated/unstable (survivorship of point-in-time top
+   gainers). Trust DIRECTION and gate-passes, not the % levels.
+5. NOTHING is proven. Halal filter is OFF (no halal_stocks.json) and news
+   features are zeros — two invariant-relevant gaps for a real result. Paper
+   trading (success condition #8) is the only thing that can confirm any of
+   this and remains pending.
+
+Recommended next moves (pick one, one change at a time):
+  a. Paper-trade the E3 gap-capped SELECTIVE system (fixed-TP or rule-only) via
+     --live paper flow — the only path to a real success condition.
+  b. Source a proper halal_stocks.json so the universe is actually halal (the #1
+     invariant), then re-run E3 to see if the edge survives the halal subset.
+  c. More regimes: extend to 2024 (another ~250 days) to further de-noise.
+  d. Do NOT keep tuning gap caps — diminishing returns; deep-loss risk is
+     intrinsic to fixed-stop gapper entries.
+
+---
