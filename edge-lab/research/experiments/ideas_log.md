@@ -67,3 +67,13 @@ Accepted-or-rejected / Why.
 - **Accepted or rejected:** rejected
 - **Why:** fewer than 40 out-of-sample trades; fewer than 55% of OOS months positive; more than half of PnL from one ticker; more than 60% of PnL from one month; expectancy not positive under stress: slippage_x2; expectancy not positive under stress: fees_x2; expectancy not positive under stress: entry_delay_1m; bootstrap p=nan fails trial-adjusted threshold (n_trials=15)
 - **Logged:** 2026-07-06T04:23:49.362049+00:00
+
+## EXP-20260707-96ffd2 — GapRvol grid + ML ranking walk-forward cycle
+- **Idea:** GapRvol grid + ML ranking walk-forward cycle
+- **Reason:** baseline continuation hypotheses per research plan
+- **Data needed:** REAL Massive 2023-2025
+- **Test method:** walk-forward grid (324 trials), stress battery, edge gate
+- **Result:** {"oos": {"total_trades": 0}, "stress_keys": [], "ml_oos": {"total_trades": 172, "win_rate": 0.5116, "avg_win": 0.01922, "avg_loss": -0.0229, "profit_factor": 0.879, "expectancy": -0.00135, "net_return_compounded": -0.2478, "net_pnl_usd": -481.18, "max_drawdown": -0.3771, "sharpe": -0.87, "sortino": -1.351, "worst_day": -0.0648, "worst_week": -0.1425, "worst_month": -0.2494, "pct_months_positive": 0.667, "n_days": 175, "n_months": 9, "stability": {"top_ticker": "ALAB", "top_ticker_pnl_share": null, "top_month": "2025-09", "top_month_pnl_share": null, "n_unique_tickers": 154}, "by_exit_reason": {"count": {"eod": 1, "no_fill": 1, "sl": 43, "time_stop": 51, "tp": 77}, "mean": {"eod": -0.0074, "no_fill": 0.0, "sl": -0.0338, "time_stop": -0.0075, "tp": 0.0209}}}}
+- **Accepted or rejected:** rejected
+- **Why:** no fold produced a chosen configuration
+- **Logged:** 2026-07-07T19:42:50.157149+00:00

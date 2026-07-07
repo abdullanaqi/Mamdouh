@@ -197,4 +197,12 @@ def load_daily_history() -> pd.DataFrame:
 
 
 def available_minute_dates() -> list[pd.Timestamp]:
-    return sorted(pd.Timestamp(p.stem) for p in CFG.paths.minute.glob("*.parquet"))
+    """Dates with minute data available: raw minute parquet OR a complete
+    feature-cache day (features/labels/candidate-bars precomputed). Cached
+    days remain fully usable even after their minute parquet is pruned for
+    disk space, so they must stay in the research date universe."""
+    dates = {pd.Timestamp(p.stem) for p in CFG.paths.minute.glob("*.parquet")}
+    candbars = CFG.paths.cache / "candbars"
+    if candbars.exists():
+        dates |= {pd.Timestamp(p.stem) for p in candbars.glob("*.parquet")}
+    return sorted(dates)

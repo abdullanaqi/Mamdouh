@@ -65,7 +65,15 @@ class _LazyDayView:
         if bars is not None:
             return bars
         v = self._mat()
-        return pd.DataFrame() if v is None else v._full_day_unsafe(ticker)  # noqa: SLF001
+        if v is None:
+            # A candidate exists (features cached) but its bars are neither
+            # in the candidate-bars cache nor loadable from the minute file
+            # (pruned). The trade would be dropped SILENTLY -- make it loud.
+            log.warning("%s %s: no bars in candbars cache and minute file "
+                        "unavailable; simulated trade dropped",
+                        self.date.date(), ticker)
+            return pd.DataFrame()
+        return v._full_day_unsafe(ticker)  # noqa: SLF001
 
 
 def run_backtest(strategy, dates, daily_panel: pd.DataFrame,
