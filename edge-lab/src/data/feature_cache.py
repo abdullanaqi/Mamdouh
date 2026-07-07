@@ -38,9 +38,14 @@ ROWS_DIR = CFG.paths.cache / "rows"
 BARS_DIR = CFG.paths.cache / "candbars"
 
 # Small in-memory LRUs so a val-window sweep (63 days x 3 times) served from
-# disk does not re-read parquet 108 times per fold.
-_MAX_LISTS = 512
-_MAX_BARS_DAYS = 16
+# disk does not re-read parquet 108 times per fold. Sizes are RAM-critical:
+# one day-list is ~7MB of dicts (~3.7k tickers). Features are re-read across
+# all 108 configs per fold (val+test windows: <=189 (date,time) keys), so
+# that LRU must cover a window sweep; rows are consumed once per fold via
+# the memoized training frame, so a token LRU suffices.
+_MAX_FEAT_LISTS = 200
+_MAX_ROWS_LISTS = 16
+_MAX_BARS_DAYS = 8
 _lru_feat: OrderedDict = OrderedDict()
 _lru_rows: OrderedDict = OrderedDict()
 _lru_bars: OrderedDict = OrderedDict()
@@ -94,14 +99,14 @@ def has_rows(d, decision_times) -> bool:
 def load_features(d, hhmm: str) -> list[dict] | None:
     """Cached features for ALL universe tickers at (d, hhmm), or None."""
     key = (_dstr(d), hhmm)
-    return _lru_get(_lru_feat, key, _MAX_LISTS,
+    return _lru_get(_lru_feat, key, _MAX_FEAT_LISTS,
                     lambda: _load_records(_feat_path(d, hhmm)))
 
 
 def load_rows(d, hhmm: str) -> list[dict] | None:
     """Cached features+labels for (d, hhmm), or None."""
     key = (_dstr(d), hhmm)
-    return _lru_get(_lru_rows, key, _MAX_LISTS,
+    return _lru_get(_lru_rows, key, _MAX_ROWS_LISTS,
                     lambda: _load_records(_rows_path(d, hhmm)))
 
 
