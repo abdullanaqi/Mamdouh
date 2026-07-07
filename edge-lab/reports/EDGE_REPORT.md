@@ -1,13 +1,32 @@
 # EDGE REPORT
 
-_This report answers the project's core questions honestly. It will be
-regenerated with real numbers after `scripts/run_research.py` is run on
-real Massive data. As of this build, no real data has been evaluated._
+_This report answers the project's core questions honestly._
+_Last updated 2026-07-07 after the first full run on REAL data:_
+_Massive flat files, 2023-01-03 .. 2025-12-31 (752 trading days)._
 
 ## Verdict
-**No valid edge found yet.** No real market data has been processed (the
-build sandbox is blocked from Massive). All figures produced so far are
-from synthetic random-walk data and are not evidence of any edge.
+**No valid edge found yet — now established on real data, not just by
+default.** The full research cycle ran on 3 years of real Massive minute
+and daily data (leakage audit passed on that data first: structural
+future-invariance clean, no suspicious correlations).
+
+- **GapRvol grid (756 trials, 7 walk-forward folds): zero out-of-sample
+  trades.** In every fold, every configuration produced either fewer than
+  8 validation trades or no candidate with positive empirical expectancy
+  net of modeled costs, so no configuration was ever frozen for testing.
+  A diagnostic probe confirms candidates DO pass the gates (~8/day); their
+  EV is simply negative (median ≈ −0.43% per trade, of which only ≈ −0.25%
+  is modeled costs). Gap-up continuation at these decision times has
+  negative gross edge on this data.
+- **ML ranking strategy (7 folds, models never see val/test): 360
+  out-of-sample trades, win rate 55.6%, expectancy −0.107%/trade, profit
+  factor 0.90, compounded return −39.2%, Sharpe −0.65.** More trades, same
+  conclusion: costs and adverse selection eat the gross edge.
+- Edge gate: failed at the first rule ("no fold produced a chosen
+  configuration"); the stress battery therefore had nothing to stress.
+
+The system did exactly what it was designed to do: it refused to promote
+a losing hypothesis family into a strategy.
 
 ## The 20-question self-check
 
@@ -45,7 +64,11 @@ from synthetic random-walk data and are not evidence of any edge.
 20. **Would the verdict survive an adversarial reviewer?** Yes — the
     honest verdict is "no edge found yet," which is the safe default.
 
-## What running on real data will add
-Real out-of-sample metrics, the leakage audit on real data, the stress
-battery outcome, and either an edge *candidate* (if every gate passes) or a
-continued "no edge yet" with the specific failed rules listed.
+## What would change this verdict
+A *different hypothesis family* — not more tuning of this one. The grid
+was already 108 configurations across 3 decision times; the failure mode
+is not "wrong parameters" but "negative gross expectancy of the entry
+class". Next candidates worth coding and testing under the same protocol:
+mean-reversion entries, catalyst/news conditioning, short side, or
+different holding horizons. Every new idea goes through the same gate:
+leakage audit → walk-forward → stress battery → untouched test window.

@@ -8,12 +8,14 @@ in-sample fitting from out-of-sample testing, models real trading costs
 pessimistically, refuses to look ahead, and reports "No valid edge found
 yet" unless a strict, multi-part gate is passed on untouched data.
 
-> **Status right now:** no real market data has been evaluated. The build
-> and validation happened inside a sandbox with no network access to
-> Massive, so every number produced so far is from **synthetic random-walk
-> data** used to verify the machinery. See `README_TRUTH.md`. To get real
-> results, run the four commands under "Real data workflow" on your own
-> machine.
+> **Status right now:** the full workflow has run on **real Massive data,
+> 2023–2025** (752 trading days). The leakage audit passed on real data
+> and the honest verdict is **NO VALID EDGE FOUND YET**: the
+> gap-continuation grid froze zero configurations (all candidates
+> negative-EV net of costs) and the ML ranker lost −0.107%/trade over 360
+> out-of-sample trades. The system refused to trade a losing hypothesis —
+> that is it working as designed. See `reports/EDGE_REPORT.md` and
+> `README_TRUTH.md`.
 
 ## Install
 

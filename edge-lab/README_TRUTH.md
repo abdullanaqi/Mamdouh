@@ -5,17 +5,19 @@ you (or ourselves). Read it before trusting anything.
 
 ## The single most important fact
 
-**No real market data has been evaluated by this system.** It was built in
-a sandbox whose network cannot reach `files.massive.com` or
-`api.massive.com` (verified: those hosts are blocked). Every metric
-generated so far comes from **synthetic random-walk data** created by
-`scripts/make_synthetic_data.py`, which by construction contains no edge.
-Synthetic numbers exist only to prove the code runs and the safeguards
-fire. They are labeled as synthetic in every report banner.
+**Real data HAS now been evaluated — and the verdict is still "no valid
+edge found yet", this time as a real result rather than a default.**
+On 2026-07-07 the full workflow ran on real Massive flat files covering
+2023-01-03 .. 2025-12-31 (752 trading days, full US stock universe):
+the leakage audit passed on that data, the 108-config walk-forward grid
+(7 folds, 756 trials) froze **zero** configurations (every candidate had
+negative empirical expectancy net of pessimistic costs — median ≈ −0.43%
+per trade), and the ML ranking strategy lost −0.107% per trade over 360
+out-of-sample trades. See `reports/EDGE_REPORT.md` for the numbers.
 
-So the honest current verdict is: **No valid edge found yet — because no
-real data has been run.** To change that, run the workflow in `README.md`
-on a machine with your Massive credentials and network access.
+The original build happened in a sandbox blocked from Massive, using
+synthetic random-walk data; those synthetic runs only proved the
+machinery and safeguards. That caveat is now historical.
 
 ## What has actually been demonstrated
 

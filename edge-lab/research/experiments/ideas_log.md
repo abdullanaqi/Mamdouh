@@ -77,3 +77,13 @@ Accepted-or-rejected / Why.
 - **Accepted or rejected:** rejected
 - **Why:** no fold produced a chosen configuration
 - **Logged:** 2026-07-07T19:42:50.157149+00:00
+
+## EXP-20260707-8ec8aa — GapRvol grid + ML ranking walk-forward cycle
+- **Idea:** GapRvol grid + ML ranking walk-forward cycle
+- **Reason:** baseline continuation hypotheses per research plan
+- **Data needed:** REAL Massive 2023-2025
+- **Test method:** walk-forward grid (756 trials), stress battery, edge gate
+- **Result:** {"oos": {"total_trades": 0}, "stress_keys": [], "ml_oos": {"total_trades": 360, "win_rate": 0.5556, "avg_win": 0.01802, "avg_loss": -0.02494, "profit_factor": 0.903, "expectancy": -0.00107, "net_return_compounded": -0.3919, "net_pnl_usd": -749.79, "max_drawdown": -0.5619, "sharpe": -0.648, "sortino": -0.911, "worst_day": -0.0833, "worst_week": -0.1598, "worst_month": -0.2494, "pct_months_positive": 0.571, "n_days": 406, "n_months": 21, "stability": {"top_ticker": "FN", "top_ticker_pnl_share": null, "top_month": "2025-09", "top_month_pnl_share": null, "n_unique_tickers": 282}, "by_exit_reason": {"count": {"eod": 1, "no_fill": 4, "sl": 87, "time_stop": 98, "tp": 174}, "mean": {"eod": -0.0074, "no_fill": 0.0, "sl": -0.0358, "time_stop": -0.0072, "tp": 0.0197}}}}
+- **Accepted or rejected:** rejected
+- **Why:** no fold produced a chosen configuration
+- **Logged:** 2026-07-07T22:20:30.470803+00:00
