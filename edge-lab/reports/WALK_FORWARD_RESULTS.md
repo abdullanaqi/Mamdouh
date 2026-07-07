@@ -1,8 +1,8 @@
 # Walk-forward results — GapRvolStrategy (grid)
-_Generated 2026-07-07 19:17 UTC · Data: REAL Massive 2023-2025_
+_Generated 2026-07-07 21:28 UTC · Data: REAL Massive 2023-2025_
 
 
-Folds: 3 · configurations tried: 324
+Folds: 7 · configurations tried: 756
 
 ## Fold 0
 - chosen params: `None`
@@ -17,6 +17,30 @@ _no results_
 _no results_
 
 ## Fold 2
+- chosen params: `None`
+- validation expectancy: None
+### Test (out-of-sample for this fold)
+_no results_
+
+## Fold 3
+- chosen params: `None`
+- validation expectancy: None
+### Test (out-of-sample for this fold)
+_no results_
+
+## Fold 4
+- chosen params: `None`
+- validation expectancy: None
+### Test (out-of-sample for this fold)
+_no results_
+
+## Fold 5
+- chosen params: `None`
+- validation expectancy: None
+### Test (out-of-sample for this fold)
+_no results_
+
+## Fold 6
 - chosen params: `None`
 - validation expectancy: None
 ### Test (out-of-sample for this fold)
