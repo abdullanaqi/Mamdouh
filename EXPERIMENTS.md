@@ -233,3 +233,34 @@ the only test that can confirm any signal. Continued backtest mining will not
 substitute for either.
 
 ---
+
+## E5 — patient multi-timeframe confirmation + news/FDA weighting (user request)
+Two-part idea: (a) "don't be in a hurry" — enter only after multi-timeframe
+confirmation; (b) weight/confirm on news + FDA catalysts.
+
+PART (b) NEWS/FDA — NOT TESTABLE ON THIS DATA. Verified: across all 8,957
+candidates news_count, news_sentiment, has_fda, has_earnings are ALL exactly 0,
+and market_news has 0 rows. Flat files carry no news (as designed). Cannot do
+catalyst-weighted confirmation without a news/FDA feed. Refused to fabricate
+nonzero catalysts. Needs a news API (original pipeline used FMP stock_news /
+press_releases; only Massive flat-files S3 keys are available here, not a news
+key). This is the same data gap as the halal blocker and is now the highest-
+value unlock (catalysts are plausible AND completely untested).
+
+PART (a) MTF CONFIRMATION — tested & REFUTED. Added `mtf_confirm` entry: wait
+for the 15-min opening range, then require HTF (holds above 15-min OR high) +
+MTF (5-bar momentum up) + LTF (1-min green & above VWAP); fill next bar open.
+Validation entry sweep: exp/tr -0.394%, win 22.7%, fired only 44/90 days,
+maxDD -26.2%, streak 14 — one of the WORST entries. `first_green` (early entry)
+still won (+1.257%, 36.7%). Patience HURTS: waiting for confirmation on premarket
+gappers means entering later into an already-extended move -> buy the top ->
+fade. Reverted from edited.py (engine unchanged; synthetic --quick verified).
+
+RESULT: no new edge. Consistent finding across E4-E5: on this backfilled
+top-gainer data the ONLY surviving signal is EARLY continuation-selection
+(entry=first_green, rank=open5_pct), and it still fails the -15% drawdown gate
+for forced-daily. Entry-timing variations (dip, patient MTF) all lose. The
+binding constraint is data (no news/FDA, survivorship inflation), not more
+entry logic.
+
+---
