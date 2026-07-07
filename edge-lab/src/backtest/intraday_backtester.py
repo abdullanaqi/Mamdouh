@@ -14,11 +14,58 @@ import pandas as pd
 
 from src.backtest import metrics
 from src.backtest.execution_simulator import ExitSpec, simulate_trade
+from src.data import feature_cache
 from src.data.feature_builder import PointInTimeView
 from src.data.massive_loader import load_minute_day
 from src.utils.logging import get_logger
 
 log = get_logger(__name__)
+
+
+class _LazyDayView:
+    """PointInTimeView facade that defers the (expensive) minute-file load.
+
+    When the strategy's features come from the disk feature cache, the full
+    view is never needed for candidate generation, and trade simulation can
+    usually be served from the small candidate-bars cache. The real view is
+    materialized only on an actual data access (cache miss), so behavior is
+    identical to building it eagerly -- just lazier.
+    """
+
+    def __init__(self, d, daily_panel, minute_loader):
+        self.date = pd.Timestamp(d)
+        self._panel = daily_panel
+        self._loader = minute_loader
+        self._view = None
+        self._empty = False
+
+    def _mat(self):
+        if self._view is None and not self._empty:
+            mdf = self._loader(self.date)
+            if mdf is None or len(mdf) == 0:
+                self._empty = True
+            else:
+                self._view = PointInTimeView.build(self.date, mdf, self._panel)
+        return self._view
+
+    def tickers(self):
+        v = self._mat()
+        return [] if v is None else v.tickers()
+
+    def minutes_before(self, ticker, decision_ts):
+        v = self._mat()
+        return pd.DataFrame() if v is None else v.minutes_before(ticker, decision_ts)
+
+    def daily_prev(self, ticker):
+        v = self._mat()
+        return None if v is None else v.daily_prev(ticker)
+
+    def _full_day_unsafe(self, ticker):
+        bars = feature_cache.load_cand_bars(self.date, ticker)
+        if bars is not None:
+            return bars
+        v = self._mat()
+        return pd.DataFrame() if v is None else v._full_day_unsafe(ticker)  # noqa: SLF001
 
 
 def run_backtest(strategy, dates, daily_panel: pd.DataFrame,
@@ -28,10 +75,7 @@ def run_backtest(strategy, dates, daily_panel: pd.DataFrame,
     when its expected value is <= 0 (kept separate per the spec)."""
     rows = []
     for d in dates:
-        mdf = minute_loader(d)
-        if mdf is None or len(mdf) == 0:
-            continue
-        view = PointInTimeView.build(d, mdf, daily_panel)
+        view = _LazyDayView(d, daily_panel, minute_loader)
         cands = strategy.candidates_for_day(view)  # list[dict] with scores
         if not cands:
             continue

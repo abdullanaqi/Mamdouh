@@ -28,6 +28,7 @@ import numpy as np
 import pandas as pd
 
 from src.config import CFG
+from src.data import feature_cache
 from src.data.feature_builder import PointInTimeView, compute_features
 from src.data.labeler import label_candidate
 from src.data.universe_builder import universe_for_date
@@ -44,9 +45,28 @@ _FEATURE_CACHE: dict = {}   # (date_str, hhmm) -> list[dict] features, ALL unive
 _ROW_CACHE: dict = {}       # (date_str, hhmm) -> list[dict] features+labels, ALL universe tickers
 
 
+_TRAIN_FRAME_MEMO: dict = {}  # (gate_key, times, dates_sig) -> DataFrame
+_EXIT_MODEL_MEMO: dict = {}   # same key -> fitted DynamicExitModel
+_MEMO_MAX = 6
+
+
 def clear_caches() -> None:
     _FEATURE_CACHE.clear()
     _ROW_CACHE.clear()
+    _TRAIN_FRAME_MEMO.clear()
+    _EXIT_MODEL_MEMO.clear()
+    feature_cache.clear_memory()
+
+
+def _memo_put(memo: dict, key, val) -> None:
+    memo[key] = val
+    while len(memo) > _MEMO_MAX:
+        del memo[next(iter(memo))]
+
+
+def _dates_sig(dates) -> tuple:
+    dates = list(dates)
+    return (len(dates), str(dates[0]), str(dates[-1])) if dates else (0,)
 
 
 def cost_haircut(last_price: float, sl_pct: float) -> float:
@@ -63,6 +83,9 @@ def _all_features(view: PointInTimeView, daily_panel: pd.DataFrame, hhmm: str) -
     key = (str(view.date.date()), hhmm)
     if key in _FEATURE_CACHE:
         return _FEATURE_CACHE[key]
+    disk = feature_cache.load_features(view.date, hhmm)
+    if disk is not None:
+        return disk  # LRU-bounded in feature_cache; skip unbounded dict
     uni = universe_for_date(daily_panel, view.date)
     tickers = set(uni["ticker"]) & set(view.tickers())
     dts = ts_et(view.date.date(), hhmm)
@@ -88,6 +111,9 @@ def _rows_for_day(view: PointInTimeView, daily_panel: pd.DataFrame, hhmm: str) -
     key = (str(view.date.date()), hhmm)
     if key in _ROW_CACHE:
         return _ROW_CACHE[key]
+    disk = feature_cache.load_rows(view.date, hhmm)
+    if disk is not None:
+        return disk
     rows = []
     for f in _all_features(view, daily_panel, hhmm):
         atr = f.get("atr_pct_prev")
@@ -107,6 +133,10 @@ def build_training_frame(dates, daily_panel, decision_times, gate,
     a per-candidate ATR reference exit (1.5x / 1.0x ATR)."""
     rows = []
     for d in dates:
+        if feature_cache.has_rows(d, decision_times):
+            for hhmm in decision_times:
+                rows.extend(r for r in feature_cache.load_rows(d, hhmm) if gate(r))
+            continue
         mdf = minute_loader(d)
         if mdf is None or len(mdf) == 0:
             continue
@@ -162,15 +192,49 @@ class GapRvolStrategy:
         return (g is not None and not (isinstance(g, float) and math.isnan(g))
                 and 0.005 <= g <= 0.50 and (f.get("rvol") or 0) >= 1.0)
 
+    def _gate_mask(self, df: pd.DataFrame) -> pd.Series:
+        """Vectorized equivalent of _gate for DataFrames. Must stay in
+        lock-step with _gate (tested in tests/test_gate_mask.py)."""
+        p = self.p
+
+        def col(name, default=np.nan):
+            if name in df.columns:
+                return pd.to_numeric(df[name], errors="coerce")
+            return pd.Series(default, index=df.index, dtype=float)
+
+        g = col("gap_pct")
+        m = (g.ge(p["gap_min"]) & g.le(p["gap_max"])
+             & col("rvol").fillna(0).ge(p["rvol_min"])
+             & col("ret_since_open", -1.0).fillna(-1.0).gt(0))
+        if p["require_orb"]:
+            m &= col("orb_breakout").eq(1.0)
+        if p["require_above_vwap"]:
+            m &= col("dist_vwap").gt(0)
+        return m.fillna(False)
+
     def fit(self, train_dates, daily_panel, minute_loader) -> "GapRvolStrategy":
         self.daily_panel = daily_panel
-        train = build_training_frame(train_dates, daily_panel,
-                                     [self.p["decision_time"]], self._loose_gate,
-                                     minute_loader)
+        # The loose-gated frame and the exit model depend only on
+        # (decision_time, train dates) -- identical for every grid config
+        # sharing them. Memoize both; refitting is deterministic
+        # (random_state=0), so this changes nothing but wall clock.
+        memo_key = ("gaprvol_loose", self.p["decision_time"],
+                    _dates_sig(train_dates))
+        train = _TRAIN_FRAME_MEMO.get(memo_key)
+        if train is None:
+            train = build_training_frame(train_dates, daily_panel,
+                                         [self.p["decision_time"]],
+                                         self._loose_gate, minute_loader)
+            _memo_put(_TRAIN_FRAME_MEMO, memo_key, train)
         self.train_labels = train
-        self.exit_model.fit(train)
+        cached_exit = _EXIT_MODEL_MEMO.get(memo_key)
+        if cached_exit is not None:
+            self.exit_model = cached_exit
+        else:
+            self.exit_model.fit(train)
+            _memo_put(_EXIT_MODEL_MEMO, memo_key, self.exit_model)
         if len(train) >= 60:
-            strict = train[train.apply(lambda r: self._gate(r.to_dict()), axis=1)]
+            strict = train[self._gate_mask(train)]
             if len(strict) >= 20:
                 by_m = strict.groupby(strict["date"].dt.to_period("M"))["net_ret_ref"].mean()
                 self.stability = float((by_m > 0).mean()) if len(by_m) else 0.5
