@@ -41,7 +41,7 @@ def run(param_grid=None, wf: WalkForwardConfig | None = None,
 
     print(f"== walk-forward grid: GapRvol ({len(param_grid)} configs) ==")
     res = walk_forward_grid(GapRvolStrategy, param_grid, dates, panel,
-                            minute_loader, wf=wf)
+                            minute_loader, wf=wf, ckpt_tag="gaprvol_grid")
     if "error" in res:
         print("walk-forward impossible:", res["error"])
         return res
@@ -105,7 +105,8 @@ def run(param_grid=None, wf: WalkForwardConfig | None = None,
         write_dynamic_exit_report(rows, provenance)
 
     print("== ML strategy walk-forward ==")
-    ml = walk_forward_single(MLRankingStrategy, dates, panel, minute_loader, wf=wf)
+    ml = walk_forward_single(MLRankingStrategy, dates, panel, minute_loader,
+                             wf=wf, ckpt_tag="ml_ranking")
     ml_card = ml.get("oos_card", {})
     print("ML aggregate OOS:", json.dumps({k: v for k, v in ml_card.items()
                                            if not isinstance(v, dict)}, default=str))
