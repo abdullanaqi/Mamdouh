@@ -8,3 +8,4 @@ data/cache/
 data/features/
 logs/
 .pytest_cache/
+results/walk_forward/ckpt_*.pkl
