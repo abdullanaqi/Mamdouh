@@ -264,3 +264,42 @@ binding constraint is data (no news/FDA, survivorship inflation), not more
 entry logic.
 
 ---
+
+## E6 — real news/FDA catalysts via Massive REST API (unblocks E5 part b)
+User provided the REST API key (same string as the S3 secret, confirmed from
+the "Accessing the API" tab). Built news_backfill.py: fetched 56,615 articles
+w/ per-ticker sentiment insights for all 2,465 candidate tickers (2025-01 ..
+2026-07), stored in market_news, refreshed news features via the engine's own
+_sentiment_col (leak-safe window [D-1 16:00 ET, D 09:35 ET)).
+DB: data/e6_gap30_news.duckdb (copy of e3_gap30 + news).
+
+Coverage (honest): only 647/8,958 candidate rows (7.2%) have any news in the
+window; has_fda=31, has_earnings=90, negative-sentiment=61. Micro-cap gapper
+news coverage in this feed is THIN — treat all catalyst results as low-power.
+
+Raw separation: news presence does NOT predict continuation (46.7% vs 48.1%
+base). NEGATIVE sentiment strongly predicts failure (P(label)=34.4% vs 48%,
+n=61) -> catalysts look like a VETO, not a buy signal. FDA/earnings mildly
+positive on tiny n (31/90).
+
+Engine test, same split=2025-11-25, 60d holdout:
+- rank:catalyst = -0.935%/day, maxDD -73% — ranking BY catalyst is HARMFUL
+  (selecting on news presence picks worse names). REFUTED as a selector.
+- Filter ablation: no_neg_news / no_risk_news changed NOTHING (+0.000, same 90
+  trades) — the 1/day top-ranked pick essentially never carries negative news
+  (61 neg rows spread over 374 days x 24 candidates). The veto never binds.
+- has_news filter: catastrophic (-3.56%/day). Confirms "requires news" is wrong.
+- Forced 1/day holdout WITH news features in the models: +1.659%/day, win
+  33.3%, 2xslip +1.344, maxDD -30.64 (vs E3 no-news: +1.347, -26.59). Same
+  best combo (first_green/model_be/open5_pct). Still FAILS the -15% DD gate.
+  Selective variants got WORSE (sparse news features add model noise).
+
+RESULT: **Catalyst thesis on this news source = null result.** News-weighted
+confirmation neither helps nor gates anything for the 1/day system; negative-
+news veto is real in aggregate but never fires on the top pick; catalyst
+ranking is harmful. Caveat: 7% coverage means low statistical power — a richer
+news/PR feed could still change this, but THIS feed doesn't. The E3 conclusion
+stands unchanged: early continuation-selection, DD gate still the blocker,
+paper trading still the only remaining test.
+
+---
