@@ -3,3 +3,5 @@ market_data.duckdb
 halal_research.duckdb
 reports/
 __pycache__/
+*.log
+.env
