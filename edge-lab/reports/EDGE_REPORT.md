@@ -28,6 +28,14 @@ future-invariance clean, no suspicious correlations).
 The system did exactly what it was designed to do: it refused to promote
 a losing hypothesis family into a strategy.
 
+**Independently replicated (2026-07-08):** the negative-EV finding was
+re-checked in a separate environment with an independently written
+feature/label store and an intact 2023 minute dataset (this run had pruned
+2023 minute files after caching them). Strict-gated candidates there:
+12.3/day, mean net return −0.30% / median −0.12% per trade under the
+reference exit (n=332). Same conclusion; details in REPLICATION-20260708
+in `research/experiments/ideas_log.md`.
+
 ## The 20-question self-check
 
 1. **Lookahead in features?** No. Enforced by `PointInTimeView` (hard

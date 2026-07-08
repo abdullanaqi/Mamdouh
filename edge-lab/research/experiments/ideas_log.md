@@ -87,3 +87,22 @@ Accepted-or-rejected / Why.
 - **Accepted or rejected:** rejected
 - **Why:** no fold produced a chosen configuration
 - **Logged:** 2026-07-07T22:20:30.470803+00:00
+
+## REPLICATION-20260708 — independent spot-check of the negative-EV finding
+- **What:** the "no valid edge" verdict's key claim (gap-up candidates pass
+  the gates but carry negative net expectancy) was re-checked in a separate
+  environment with an independently written feature/label store and an
+  **intact** 2023 minute dataset (the primary run had pruned 2023 minute
+  files for disk space after caching).
+- **Method:** 27 dates (2023-01-03..2023-02-09 plus 2024-07-03), features
+  and labels recomputed from raw minute data via the same PointInTimeView
+  path, then gated with a representative mid-grid config
+  (gap 2-30%, rvol >= 1.5, above VWAP, 09:45).
+- **Result:** 12.3 candidates/day pass the strict gate; their net return
+  under the ATR reference exit is mean -0.30% / median -0.12% per trade
+  (win rate 48.2%, n=332). Loose-gated pool: mean -0.53% / median -0.24%
+  (n=3886). Consistent with the primary run's diagnostic (median EV
+  ~ -0.43%/trade).
+- **Conclusion:** corroborates the verdict — candidates exist, the entry
+  class loses money net of pessimistic costs. Not a pipeline bug.
+- **Logged:** 2026-07-08
