@@ -5,3 +5,4 @@ reports/
 __pycache__/
 *.log
 .env
+*.wal
