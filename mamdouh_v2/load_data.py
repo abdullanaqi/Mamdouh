@@ -24,6 +24,31 @@ BASE_REMOTE_PATH = "us_stocks_sip/minute_aggs_v1/"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+_TICKER_FILTER_CACHE: set | None | bool = False   # False = not loaded yet
+
+
+def _ticker_filter_set():
+    """Optional ticker allow-list for disk-constrained runs.
+
+    When MAMDOUH_FILTER_TICKERS=halal, restrict downloaded minute bars to the
+    halal_tickers.json universe plus SPY. Downstream pipeline stages already
+    join everything against halal_universe, so this changes disk usage only,
+    not results. Unset (default) -> keep every ticker, original behavior.
+    """
+    global _TICKER_FILTER_CACHE
+    if _TICKER_FILTER_CACHE is not False:
+        return _TICKER_FILTER_CACHE
+    mode = os.getenv("MAMDOUH_FILTER_TICKERS", "").strip().lower()
+    if mode != "halal":
+        _TICKER_FILTER_CACHE = None
+        return None
+    with open(os.path.join(BASE_DIR, "halal_tickers.json")) as fh:
+        tickers = {str(t).strip().upper() for t in json.load(fh)}
+    tickers.add("SPY")
+    _TICKER_FILTER_CACHE = tickers
+    return tickers
+
+
 DATA_DIR = os.path.join(BASE_DIR, "data")
 MINUTE_DATA_DIR = os.path.join(DATA_DIR, "minute_data")
 NEWS_DIR = os.path.join(DATA_DIR, "news")
@@ -223,9 +248,23 @@ class StockDataDownloader:
                 logger.info(f"Downloading: {remote_filename} (Attempt {attempt}/{MAX_RETRIES})...")
                 self.s3.download_file(BUCKET, remote_key, temp_gz_path)
 
-                with gzip.open(temp_gz_path, 'rb') as f_in:
-                    with open(local_path, 'wb') as f_out:
-                        shutil.copyfileobj(f_in, f_out)
+                keep = _ticker_filter_set()
+                if keep is None:
+                    with gzip.open(temp_gz_path, 'rb') as f_in:
+                        with open(local_path, 'wb') as f_out:
+                            shutil.copyfileobj(f_in, f_out)
+                else:
+                    # Disk-constrained environments: keep only rows for the
+                    # halal universe (+SPY). Downstream stages join against
+                    # halal_universe anyway, so results are identical.
+                    with gzip.open(temp_gz_path, 'rt') as f_in, \
+                            open(local_path, 'w') as f_out:
+                        header = f_in.readline()
+                        f_out.write(header)
+                        tcol = header.rstrip("\n").split(",").index("ticker")
+                        for line in f_in:
+                            if line.split(",", tcol + 1)[tcol] in keep:
+                                f_out.write(line)
 
                 os.remove(temp_gz_path)
                 logger.info(f"✅ Converted and saved: {local_path}")

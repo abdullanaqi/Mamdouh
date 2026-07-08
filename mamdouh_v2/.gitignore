@@ -1,0 +1,5 @@
+data/
+market_data.duckdb
+halal_research.duckdb
+reports/
+__pycache__/
