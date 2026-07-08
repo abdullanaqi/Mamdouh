@@ -303,3 +303,46 @@ stands unchanged: early continuation-selection, DD gate still the blocker,
 paper trading still the only remaining test.
 
 ---
+
+## E7 — MAMDOUH v2 pipeline (user's new 17-stage codebase, mamdouh_v2/)
+DIFFERENT QUESTION than v1: studies ALL 1,348 halal names daily (mid/large
+caps, from halal-gap-orb MIDCAP_HALAL >$500M), 09:35 entry -> 15:55 exit,
+not premarket top gainers. First HALAL-FILTERED experiment of the program.
+Data: own loader, 375 days (2025-01-02..2026-07-07), 166.7M minute rows
+(halal+SPY only, disk-safety filter), 95,110 news articles. 489,568
+candidate rows. All 9 built-in leakage checks PASSED. Walk-forward monthly
+XGBoost/HGB: ranking AUC 0.61-0.71 (real signal), risk AUC ~0.93 (inflated
+by definitional overlap, flagged by its own report).
+
+Backtest grid (25 strategies), report: mamdouh_v2/reports/report_halal_backtest.md
+  Best net (their verdict): news_filter/top-1 = +0.73%/day, 52% daily win.
+  BUT top-1 net max drawdown = -75.2% (!), top-5 baseline -29.8%.
+  risk_filter tames DD (-17..-24%) but guts returns (top-1 -0.03%/day net).
+Same disease as v1: expectancy positive, equity path untradeable.
+
+DECAY (their own sections 7.10/7.11): baseline avg monthly return first half
++0.91%/mo -> second half -0.06%/mo; baseline slope NEGATIVE; ranking AUC
+degrading. The apparent edge largely DISAPPEARED in the most recent ~9
+months. Their report itself flags this as a re-validate-before-capital sign.
+
+Interesting contradiction vs v1 (different universe!): in the broad halal
+mid/large-cap universe, BOTTOM pre-entry-momentum decile wins (52.2% win) and
+TOP momentum decile is a coin-flip trap (looked_strong_but_lost 50-52%) —
+mean-reversion dominates big caps, while v1's gapper small-caps rewarded
+continuation. Both findings can be true; they are different populations.
+
+Honest caveats ON TOP of their report's own warnings (optimistic fills at
+exact 09:35/15:55 opens; heuristic costs 30/15/8bps round-trip):
+- SURVIVORSHIP IN THE UNIVERSE ITSELF: halal_tickers.json = names >$500M cap
+  as of ~2026. Names that shrank/delisted during 2025-26 are excluded from
+  the start of the window -> avg returns inflated. Not fixable without a
+  point-in-time halal list.
+- 2026-06/07 (most recent) months are NEGATIVE for the baseline.
+
+VERDICT (same standard as v1): **no proven edge.** Positive average returns
+with -30..-75% max drawdowns, a decaying trend into the present, survivorship
+in the universe, and optimistic fills do not meet any of the v1 success gates.
+The v2 pipeline itself is GOOD infrastructure (leak-checked, walk-forward,
+honest warnings) — the strategy it measures is not yet tradeable.
+
+---
